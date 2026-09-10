@@ -12,8 +12,8 @@ app = typer.Typer(help="Qué proveedor/modelo LLM usa cada subagente (configurab
 @app.command("set")
 def set_(
     subagent: str = typer.Option(..., "--subagent"),
-    provider: str = typer.Option(..., "--provider", help="anthropic | openai | gemini"),
-    model: str = typer.Option(..., "--model", help="ej. claude-sonnet-5 (anthropic) o gpt-4.1 (openai)"),
+    provider: str = typer.Option(..., "--provider", help="anthropic | openai | gemini | groq | xai"),
+    model: str = typer.Option(..., "--model", help="ej. claude-sonnet-5 (anthropic), gpt-4.1 (openai), gemini-2.0-flash (gemini), llama-3.3-70b-versatile (groq), grok-2 (xai)"),
     credential_ref: str = typer.Option(..., "--credential-ref", help="de `meridianctl secrets put`"),
 ) -> None:
     repository.set_subagent_llm_config(UUID(subagent), provider, model, credential_ref)

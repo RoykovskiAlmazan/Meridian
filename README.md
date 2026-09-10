@@ -50,17 +50,38 @@ pip install -e .
 cp .env.example .env
 ```
 
-Levanta la infraestructura de soporte (Postgres, Redis, Vault en modo dev, y los
-procesos de la plataforma) y corre el diagnóstico de salud:
+Levanta la infraestructura de soporte (Postgres, Redis, Vault, y los procesos de la
+plataforma):
 
 ```bash
 meridianctl dev up
+```
+
+**Solo la primera vez** (Vault usa almacenamiento persistente, no modo dev -- ver
+[docs/design/0016-vault-persistence.md](docs/design/0016-vault-persistence.md)),
+inicialízalo y pega el root token que te imprime en tu `.env`:
+
+```bash
+meridianctl vault init
+# copia el VAULT_TOKEN=... que imprime a tu .env
+```
+
+Después de cualquier reinicio del contenedor de Vault (no de una instalación nueva):
+
+```bash
+meridianctl vault unseal
+```
+
+Y corre el diagnóstico de salud:
+
+```bash
 meridianctl doctor
 ```
 
 `doctor` valida que todo esté realmente listo (Docker, `.env`, Postgres con el schema
-completo, Redis, Vault) y con `--fix` intenta reparar lo que es seguro reparar solo
-(crear `.env` desde el ejemplo si falta, aplicar tablas de Postgres que falten):
+completo, Redis, Vault inicializado/desellado) y con `--fix` intenta reparar lo que es
+seguro reparar solo (crear `.env` desde el ejemplo si falta, aplicar tablas/columnas de
+Postgres que falten):
 
 ```bash
 meridianctl doctor --fix
@@ -118,13 +139,15 @@ bajo un profile propio.
 ```
 meridianctl doctor              Diagnóstico de salud (con --fix)
 meridianctl dev up/down         Infra de soporte (Docker Compose)
+meridianctl vault init/unseal   Inicialización/desello de Vault (una vez / tras reinicios)
 meridianctl tenant ...          Alta/consulta de tenants
 meridianctl gateway ...         Alta/consulta/revocación de gateways
-meridianctl subagent ...        Alta/consulta de subagentes
-meridianctl allow ...           Allowlist explícita gateway x subagente
+meridianctl subagent ...        Alta/consulta de subagentes (--parent para sub-subagentes)
+meridianctl allow ...           Allowlist explícita gateway x subagente (set-sub para sub-subagentes)
 meridianctl policy ...          Comportamiento configurable por subagente
-meridianctl secrets put         Alta de secretos en Vault (prompt oculto)
-meridianctl llm set/get/test    Proveedor LLM por subagente
+meridianctl approvals ...       Aprobación humana de intents que la requieren
+meridianctl secrets put         Alta de secretos en Vault (prompt oculto o --from-file)
+meridianctl llm set/get/test    Proveedor LLM por subagente (anthropic/openai/gemini/groq/xai)
 meridianctl cron ...            Gateway de tipo cron (disparos programados)
 meridianctl audit tail/prune    Auditoría y retención
 meridianctl bus status          Salud del bus interno (Redis Streams)

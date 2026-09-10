@@ -20,6 +20,15 @@ def _build(provider: str, model: str, api_key: str) -> LLMProvider:
     if provider == "openai":
         from meridian.llm.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key=api_key, model=model)
+    if provider == "groq":
+        from meridian.llm.openai_provider import GroqProvider
+        return GroqProvider(api_key=api_key, model=model)
+    if provider == "xai":
+        from meridian.llm.openai_provider import XAIProvider
+        return XAIProvider(api_key=api_key, model=model)
+    if provider == "gemini":
+        from meridian.llm.gemini_provider import GeminiProvider
+        return GeminiProvider(api_key=api_key, model=model)
     raise ValueError(f"proveedor LLM no soportado todavía: {provider!r}")
 
 

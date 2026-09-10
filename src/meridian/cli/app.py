@@ -19,6 +19,7 @@ from meridian.cli.commands import (
     secrets,
     subagent,
     tenant,
+    vault,
 )
 from meridian.cli.console import get_version, print_banner
 
@@ -42,6 +43,7 @@ app.add_typer(secrets.app, name="secrets")
 app.add_typer(llm.app, name="llm")
 app.add_typer(audit.app, name="audit")
 app.add_typer(bus.app, name="bus")
+app.add_typer(vault.app, name="vault")
 
 
 def _version_callback(value: bool) -> None:

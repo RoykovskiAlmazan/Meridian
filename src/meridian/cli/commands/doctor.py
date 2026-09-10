@@ -99,14 +99,22 @@ def _check_redis() -> bool:
 def _check_vault() -> bool:
     try:
         import hvac
+        anon_client = hvac.Client(url=settings.vault_addr)
+        if not anon_client.sys.is_initialized():
+            fail("Vault no está inicializado -- corre `meridianctl vault init` (una sola vez).")
+            return False
+        if anon_client.sys.is_sealed():
+            fail("Vault está sellado -- corre `meridianctl vault unseal`.")
+            return False
+
         client = hvac.Client(url=settings.vault_addr, token=settings.vault_token)
         if not client.is_authenticated():
-            fail("Vault respondió pero el token no autenticó -- revisa VAULT_TOKEN en .env")
+            fail("Vault respondió pero el token no autenticó -- revisa VAULT_TOKEN en .env (el root token lo imprime `meridianctl vault init`, ya no es un valor fijo).")
             return False
     except Exception as exc:  # noqa: BLE001
         fail(f"Vault no alcanzable: {exc}")
         return False
-    ok("Vault alcanzable y autenticado")
+    ok("Vault alcanzable, inicializado, desellado y autenticado")
 
     try:
         mounts = client.sys.list_mounted_secrets_engines()

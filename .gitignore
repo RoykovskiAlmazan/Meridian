@@ -9,6 +9,8 @@ dist/
 
 # Secretos y configuración local -- NUNCA en texto plano en el repo (sección 5 del brief)
 .env
+.vault-init.json
+.pytest_cache/
 
 # Artefactos de Docker / datos de desarrollo local
 docker/init/*.local.sql
