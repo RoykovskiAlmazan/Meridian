@@ -7,20 +7,35 @@ app = typer.Typer(help="Levanta/baja la infra de soporte local (Postgres, Redis,
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _COMPOSE_FILE = _REPO_ROOT / "docker" / "docker-compose.yml"
+_ENV_FILE = _REPO_ROOT / ".env"
+
+# --env-file explícito: `docker compose -f docker/docker-compose.yml` no siempre resuelve
+# el .env de la raíz del repo de forma confiable a partir de solo el cwd (depende de cómo
+# Compose calcule el "directorio de proyecto" a partir de -f) -- se comprobó en la práctica
+# que sin esto SUBAGENT_ID/etc. de subagentes de dominio real quedaban vacíos en silencio.
+_BASE_CMD = ["docker", "compose", "--env-file", str(_ENV_FILE), "-f", str(_COMPOSE_FILE)]
+
+_PROFILES = ["subagents", "research"]
 
 
 @app.command("up")
-def up(subagents: bool = typer.Option(False, "--subagents", help="Incluir sample_subagent_a/b (requiere SUBAGENT_A_ID/SUBAGENT_B_ID en .env).")) -> None:
-    cmd = ["docker", "compose", "-f", str(_COMPOSE_FILE), "up", "-d", "--build"]
+def up(
+    subagents: bool = typer.Option(False, "--subagents", help="Incluir sample_subagent_a/b (requiere SUBAGENT_A_ID/SUBAGENT_B_ID en .env)."),
+    research: bool = typer.Option(False, "--research", help="Incluir paper_search/paper_summarizer (requiere PAPER_SEARCH_SUBAGENT_ID/PAPER_SUMMARIZER_SUBAGENT_ID en .env)."),
+) -> None:
+    cmd = list(_BASE_CMD)
     if subagents:
-        cmd = ["docker", "compose", "-f", str(_COMPOSE_FILE), "--profile", "subagents", "up", "-d", "--build"]
+        cmd += ["--profile", "subagents"]
+    if research:
+        cmd += ["--profile", "research"]
+    cmd += ["up", "-d", "--build"]
     subprocess.run(cmd, check=True, cwd=_REPO_ROOT)
 
 
 @app.command("down")
 def down() -> None:
-    subprocess.run(
-        ["docker", "compose", "-f", str(_COMPOSE_FILE), "--profile", "subagents", "down"],
-        check=True,
-        cwd=_REPO_ROOT,
-    )
+    cmd = list(_BASE_CMD)
+    for profile in _PROFILES:
+        cmd += ["--profile", profile]
+    cmd += ["down"]
+    subprocess.run(cmd, check=True, cwd=_REPO_ROOT)

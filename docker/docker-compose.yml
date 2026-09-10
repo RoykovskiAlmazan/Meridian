@@ -184,5 +184,65 @@ services:
     tmpfs:
       - /tmp
 
+  # Caso de prueba de dominio real (docs/design/0007-paper-search-app.md): buscar en arXiv
+  # + resumir el resultado top, en paralelo, sobre la misma query. Requieren
+  # PAPER_SEARCH_SUBAGENT_ID / PAPER_SUMMARIZER_SUBAGENT_ID en .env. Se levantan con:
+  #   docker compose -f docker/docker-compose.yml --profile research up -d --build
+  paper_search:
+    profiles: ["research"]
+    build:
+      context: ..
+      dockerfile: docker/subagents/paper_search.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+      SUBAGENT_ID: ${PAPER_SEARCH_SUBAGENT_ID:-}
+      HTTP_PROXY: http://egress_proxy:3128
+      HTTPS_PROXY: http://egress_proxy:3128
+      PYTHONDONTWRITEBYTECODE: "1"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      meridian_internal:
+        ipv4_address: 172.28.1.12
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  paper_summarizer:
+    profiles: ["research"]
+    build:
+      context: ..
+      dockerfile: docker/subagents/paper_summarizer.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+      SUBAGENT_ID: ${PAPER_SUMMARIZER_SUBAGENT_ID:-}
+      HTTP_PROXY: http://egress_proxy:3128
+      HTTPS_PROXY: http://egress_proxy:3128
+      PYTHONDONTWRITEBYTECODE: "1"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      meridian_internal:
+        ipv4_address: 172.28.1.13
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
 volumes:
   postgres_data:
