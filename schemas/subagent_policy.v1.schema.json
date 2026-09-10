@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meridian.internal/schemas/subagent_policy/v1.json",
+  "title": "SubagentPolicy",
+  "description": "Comportamiento configurable por subagente -- Meridian no asume ningún dominio, así que qué es irreversible, cuándo pedir aprobación, reintentos y tono los define quien instale la plataforma, por subagente. Ver docs/design/0005-behavior-policy.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "requires_approval_intents": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Intent types (o '*' para todos) que requieren aprobación humana explícita antes de que el subagente los ejecute. Vacío = ninguno requiere aprobación."
+    },
+    "destructive": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "type": "boolean",
+          "description": "Si el subagente puede realizar acciones irreversibles/destructivas en absoluto (ej. borrar, no solo mover; cancelar, no solo pausar)."
+        },
+        "requires_approval": {
+          "type": "boolean",
+          "description": "Si 'allowed' es true, si aun así cada acción destructiva necesita aprobación puntual."
+        }
+      }
+    },
+    "retry_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_retries": { "type": "integer", "minimum": 0 },
+        "backoff_seconds": { "type": "number", "minimum": 0 }
+      }
+    },
+    "notify_on_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "channel_ref": {
+          "type": ["string", "null"],
+          "description": "Referencia opaca a un canal de notificación (ej. un gateway_id de tipo whatsapp) -- nunca una dirección/teléfono en claro aquí."
+        }
+      }
+    },
+    "tone": {
+      "type": "string",
+      "description": "Guía de tono libre para las respuestas/errores de este subagente, ej. 'directo y técnico' o 'cordial para usuario final no técnico'."
+    }
+  }
+}

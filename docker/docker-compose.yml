@@ -1,0 +1,188 @@
+# Infra de soporte para desarrollo local del MVP (entregable 2) + sandbox de red del
+# entregable 3 (docs/design/0004-sandbox-exec-model.md).
+# Vault corre en modo "dev" (in-memory, auto-unseal, root token fijo) -- SOLO para desarrollo,
+# nunca usar vault dev en producción.
+#
+# Segmentación de red:
+#   meridian_internal (internal: true) -- sin ruta a internet. Todo vive aquí por defecto,
+#                                          es la red que usan main_agent y subagentes entre sí.
+#   meridian_hostnet   (bridge normal)  -- SOLO para publicar puertos al host (Postgres, Redis,
+#                                          Vault, mock_gateway). Una red "internal: true" en
+#                                          Docker bloquea también el port-publish hacia el host,
+#                                          no solo la salida a internet -- por eso estos
+#                                          servicios están en ambas redes, y main_agent/subagentes
+#                                          SOLO en meridian_internal (no necesitan ser alcanzables
+#                                          desde el host, y así no ganan una ruta extra afuera).
+#   meridian_egress    (bridge normal)  -- con salida a internet. Solo egress_proxy la toca.
+# Un subagente que necesite llamar una API externa lo hace vía egress_proxy (Squid), que
+# aplica una allowlist de dominios por IP fija de subagente (ver docker/sandbox/squid.conf).
+# Sin entrada en esa allowlist, un subagente NO tiene salida a internet -- seguro por defecto.
+
+networks:
+  meridian_internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+  meridian_hostnet:
+    driver: bridge
+  meridian_egress:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: meridian
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian_dev_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init/postgres_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    networks:
+      - meridian_internal
+      - meridian_hostnet
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks:
+      - meridian_internal
+      - meridian_hostnet
+
+  vault:
+    image: hashicorp/vault:1.17
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-only-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    networks:
+      - meridian_internal
+      - meridian_hostnet
+
+  egress_proxy:
+    image: ubuntu/squid:latest
+    volumes:
+      - ./sandbox/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      - meridian_internal
+      - meridian_egress
+
+  main_agent:
+    build:
+      context: ..
+      dockerfile: docker/main_agent.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+    depends_on:
+      - postgres
+      - redis
+      - vault
+    networks:
+      - meridian_internal
+
+  cron_gateway:
+    build:
+      context: ..
+      dockerfile: docker/cron_gateway.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+    depends_on:
+      - postgres
+      - redis
+      - vault
+    networks:
+      - meridian_internal
+
+  mock_gateway:
+    build:
+      context: ..
+      dockerfile: docker/mock_gateway.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - vault
+    networks:
+      - meridian_internal
+      - meridian_hostnet
+
+  # sample_subagent_a y sample_subagent_b requieren SUBAGENT_A_ID / SUBAGENT_B_ID en .env
+  # (los ids de Postgres creados con `meridianctl subagent create`). Se levantan a demanda:
+  #   meridianctl dev up --subagents
+  sample_subagent_a:
+    profiles: ["subagents"]
+    build:
+      context: ..
+      dockerfile: docker/subagents/sample_subagent_a.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+      SUBAGENT_ID: ${SUBAGENT_A_ID:-}
+      HTTP_PROXY: http://egress_proxy:3128
+      HTTPS_PROXY: http://egress_proxy:3128
+      PYTHONDONTWRITEBYTECODE: "1"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      meridian_internal:
+        ipv4_address: 172.28.1.10
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  sample_subagent_b:
+    profiles: ["subagents"]
+    build:
+      context: ..
+      dockerfile: docker/subagents/sample_subagent_b.Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token
+      SUBAGENT_ID: ${SUBAGENT_B_ID:-}
+      HTTP_PROXY: http://egress_proxy:3128
+      HTTPS_PROXY: http://egress_proxy:3128
+      PYTHONDONTWRITEBYTECODE: "1"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      meridian_internal:
+        ipv4_address: 172.28.1.11
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  postgres_data:

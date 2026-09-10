@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meridian.internal/schemas/task_intent/v1.json",
+  "title": "TaskIntent",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "message_id",
+    "correlation_id",
+    "tenant_id",
+    "issued_at",
+    "origin",
+    "intent",
+    "trace"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "message_id": { "type": "string", "format": "uuid" },
+    "correlation_id": { "type": "string", "format": "uuid" },
+    "causation_id": { "type": ["string", "null"], "format": "uuid" },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" },
+    "idempotency_key": { "type": ["string", "null"] },
+    "origin": {
+      "type": "object",
+      "required": ["gateway_id", "gateway_type", "scopes"],
+      "additionalProperties": false,
+      "properties": {
+        "gateway_id": { "type": "string", "minLength": 1 },
+        "gateway_type": {
+          "type": "string",
+          "enum": ["whatsapp", "telegram", "internal_api", "cron", "web_panel", "other"]
+        },
+        "scopes": { "type": "array", "items": { "type": "string" } },
+        "credential_ref": { "type": ["string", "null"] }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "required": ["type", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+          "description": "Namespaced intent name, domain defined by whoever deploys Meridian, e.g. billing.send_invoice or crm.update_contact"
+        },
+        "target": {
+          "type": "object",
+          "required": ["mode", "subagent_ids"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "type": "string", "enum": ["single", "fan_out"] },
+            "subagent_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          }
+        },
+        "payload": { "type": "object" },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "normal", "high"],
+          "default": "normal"
+        }
+      }
+    },
+    "trace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["hop", "agent_id", "received_at", "decision"],
+        "additionalProperties": false,
+        "properties": {
+          "hop": { "type": "integer", "minimum": 0 },
+          "agent_id": { "type": "string" },
+          "received_at": { "type": "string", "format": "date-time" },
+          "decision": { "type": "string", "enum": ["allowed", "denied", "forwarded"] },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

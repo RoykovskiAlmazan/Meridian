@@ -1,0 +1,20 @@
+# Entornos y dependencias
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Secretos y configuración local -- NUNCA en texto plano en el repo (sección 5 del brief)
+.env
+
+# Artefactos de Docker / datos de desarrollo local
+docker/init/*.local.sql
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

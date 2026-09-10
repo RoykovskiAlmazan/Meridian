@@ -1,0 +1,100 @@
+# Proyecto: Meridian (codename: Project Foreman)
+
+> Este documento es el punto de partida para que otra sesión de Claude Code (u otro colaborador) retome el trabajo. Contiene el objetivo, el contexto de investigación previa, requisitos explícitos, y una lista honesta de **decisiones aún no tomadas**. No asumas ninguna decisión de arquitectura/stack no marcada como "DECIDIDO" — cuando encuentres un punto abierto, pregúntale al usuario (Rodrigo) antes de comprometerte a una implementación, y actualiza este archivo con lo que se vaya decidiendo.
+
+## 1. Objetivo del proyecto
+
+Construir, desde cero, un servicio propio de orquestación de sistemas multiagente (en adelante "la Plataforma"), inspirado en el análisis de un proyecto de código abierto llamado **OpenClaw** (asistente de IA personal con gateway + subagentes + plugins), pero:
+
+- Con reglas de negocio y comportamiento documentadas por Rodrigo, no heredadas de OpenClaw.
+- Con un modelo de seguridad más estricto desde el diseño (ver sección 5).
+- Con soporte nativo para **múltiples gateways de entrada** que envían instrucciones a un **agente principal ("main")**, el cual delega tareas a **subagentes especializados**.
+
+Caso de uso motivador (contexto real de Rodrigo, no necesariamente el único caso de uso final): hoy opera manualmente varios agentes independientes para gestión de stock/inventario en distintos marketplaces (Amazon, Liverpool, MercadoLibre, Walmart) sobre una instancia de OpenClaw. La Plataforma nueva busca ser el reemplazo propio de esa capa de orquestación, generalizable a otros dominios a futuro.
+
+## 2. Contexto: qué aprendimos auditando OpenClaw
+
+Se hizo una auditoría de arquitectura y seguridad del repo fuente de OpenClaw (`C:\Users\Rodrigo Romero\openclaw`) y de una instancia real en ejecución (`C:\Users\Rodrigo Romero\.openclaw`). Resumen relevante para el diseño de la Plataforma:
+
+### Arquitectura de OpenClaw (lo que funcionó bien / vale la pena tomar como referencia)
+- Separación estricta entre **código** (el repo, stateless) y **estado/datos** (directorio home tipo `~/.openclaw`, con config, credenciales, memoria, sesiones).
+- **Gateway** como daemon de borde que expone canales (WhatsApp, Telegram, etc.) y corre como servicio de usuario (systemd/launchd/schtasks).
+- **Subagentes** aislados por `agentDir`/`workspace` propio (memoria y contexto separados), con una allowlist explícita en el agente `main` de a qué subagentes puede delegar (`subagents.allowAgents`).
+- Comunicación subagente→padre por **push** (el subagente anuncia su resultado al terminar), no por polling.
+- Personalidad/comportamiento del agente definido en archivos Markdown versionables (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`) que se inyectan al system prompt — patrón simple y auditable que vale la pena replicar.
+- Memoria como archivos Markdown planos + backend opcional de búsqueda híbrida (FTS + embeddings) sobre SQLite — evita "estado oculto".
+- Manifiestos declarativos de plugins/skills (`openclaw.plugin.json`, `SKILL.md` con front-matter) con validación de compatibilidad de versión antes de instalar.
+
+### Debilidades de seguridad detectadas (evitar replicarlas)
+1. **Ejecución de comandos sin sandbox ni aprobación por defecto**: `sandbox.mode: off`, `security: full`, `ask: off` — el agente ejecuta en el host real salvo que el operador endurezca manualmente la config. **La Plataforma debe invertir este default: seguro por defecto, permisivo solo si se configura explícitamente.**
+2. **Un solo token/password de "operador" con acceso total** (`operator.admin/read/write/approvals/pairing`) — no hay separación de scopes real entre quien puede leer, escribir o aprobar. Esto es directamente relevante para el requisito de "múltiples gateways": cada gateway necesita su propia identidad y scopes, no un secreto compartido.
+3. **Secretos de configuración en texto plano** en el archivo de config principal (tokens de bot, password del gateway), protegidos solo por permisos de archivo del SO, sin cifrado en reposo ni integración con keychain/vault.
+4. **Credenciales de sesión de canales (ej. WhatsApp) en texto plano** en disco, mismo patrón de mitigación débil.
+5. **CI/CD con reglas de hardening desactivadas a propósito** (pinning de GitHub Actions por SHA, permisos mínimos) — deuda de seguridad reconocida y aceptada por el proyecto, no algo a copiar.
+6. **Instalación de dependencias vía `curl | bash` sin verificación de checksum** en imágenes de sandbox — riesgo de cadena de suministro.
+7. **Sin firma criptográfica ni sandbox de ejecución real para plugins de terceros** — la validación es solo declarativa (compatibilidad de versión + escaneo estático), la confianza final recae 100% en el operador.
+8. Modelo de amenazas de OpenClaw es explícitamente "un usuario, un host, sin multi-tenancy" — varias clases de escalación (plugin ya confiado, `canvas.eval`, symlinks preexistentes) se consideran "fuera de alcance" por diseño. Para la Plataforma, si se prevé más de un operador/gateway con distinto nivel de confianza, **este supuesto no aplica y hay que diseñar multi-tenancy real desde el inicio** (ver sección 4).
+
+## 3. Requisito central: múltiples gateways → main → subagentes
+
+Este es el requisito explícito que distingue a la Plataforma de una copia de OpenClaw. Debe soportar que **varios gateways** (posiblemente de distinta naturaleza: WhatsApp, un API interno, un cron, un panel web, etc.) puedan enviar instrucciones al agente `main`, y que este las enrute/delegue a los subagentes correspondientes.
+
+Lineamientos ya acordados con Rodrigo (no negociables salvo que él los cambie explícitamente):
+- Cada gateway debe tener **su propia identidad/credencial**, no un secreto compartido único.
+- El `main` debe recibir, junto con cada instrucción, **metadata de procedencia** (de qué gateway vino, con qué nivel de confianza/scopes) para decidir si puede delegarla a un subagente dado.
+- La delegación gateway × subagente debe ser **allowlist explícita**, nunca implícita ("todo gateway autenticado puede pedir cualquier cosa a cualquier subagente" está descartado).
+- El protocolo interno de mensajes debe soportar **fan-out** (una instrucción dispara varios subagentes en paralelo) y **fan-in** (agregar resultados), con un `correlation_id` desde el diseño inicial del esquema de mensajes.
+- Los gateways NO deben acoplarse directamente al proceso del `main agent` — debe existir una capa de transporte/cola intermedia para que la caída de un gateway no tumbe al orquestador y para poder escalar gateways de forma independiente.
+- Toda la configuración y operación de la Plataforma (alta/baja de tenants, gateways, subagentes, allowlists, rotación de credenciales, inspección de auditoría, salud del bus) debe poder hacerse **desde una CLI propia** (`meridianctl`), sin depender de un panel web para tareas de administración. Ver [docs/design/0002-repo-structure-and-cli.md](docs/design/0002-repo-structure-and-cli.md).
+
+## 4. Decisiones NO tomadas todavía (a resolver en conversación con Rodrigo, en orden sugerido)
+
+Estas son preguntas abiertas. No elijas por default silenciosamente — plantéalas explícitamente cuando llegue el momento de implementar esa parte, y actualiza este archivo con la respuesta.
+
+1. **Cómo se definen y versionan las reglas de comportamiento/personalidad de la Plataforma** (equivalente propio a `AGENTS.md`/`SOUL.md` de OpenClaw) — Rodrigo quiere documentarlas él mismo; falta decidir el formato y dónde viven en el repo.
+2. **Observabilidad**: qué se loguea, dónde (local vs. servicio externo tipo Prometheus/OTel), y política de retención dado que hay datos de negocio sensibles de por medio. A resolver en roadmap paso 6.
+3. **Interfaz de abstracción multi-proveedor LLM**: cómo se normaliza tool-calling/streaming/costos entre Claude, Codex/OpenAI y Gemini para que main y subagentes puedan mezclar proveedores sin acoplar el resto del sistema a un SDK concreto.
+
+## 8. Decisiones tomadas
+
+| # | Decisión | Respuesta | Justificación |
+|---|---|---|---|
+| 1 | Nombre del proyecto | **Meridian**, codename **Project Foreman** | Elegido por Rodrigo, 2026-09-09. |
+| 2 | Modelo de multi-tenancy | **Multi-tenant real desde el día uno** | Se prevé dar acceso a terceros/clientes con aislamiento fuerte entre ellos, no solo defensa en profundidad para un operador único. Cambia el diseño de scopes, storage e identidad desde el primer commit. |
+| 3 | Alcance del MVP | **1 gateway + main + 2 subagentes de prueba** | Valida el contrato de mensajes y el bus antes de invertir en lógica de negocio de ningún dominio específico — Meridian no está atado a stock/inventario ni a ningún otro dominio; ese caso es solo el contexto motivador de Rodrigo (sección 1), no una restricción de producto. |
+| 4 | Stack de lenguaje/runtime | **Python** | Preferencia de Rodrigo sobre TypeScript/Node (sugerencia original basada en continuidad con OpenClaw, descartada). |
+| 5 | Modelo de proceso de subagentes | **Contenedores (Docker) por subagente** | Da aislamiento de filesystem/red/recursos por defecto (relevante porque manejan credenciales de marketplaces), es coherente con la decisión de multi-tenancy real, y corre igual en Linux y Windows — requisito explícito de Rodrigo de que la Plataforma sea instalable en ambos SO. |
+| 6 | Transporte del bus interno | **Redis Streams** | Soporta fan-out/fan-in y consumer groups nativos, infra ligera, corre igual en Linux/Windows/Docker. |
+| 7 | Estrategia de secretos | **Vault externo desde el día uno** (HashiCorp Vault / 1Password) | Coherente con multi-tenancy real y con el requisito no negociable de nunca guardar secretos en texto plano (sección 5). |
+| 8 | Modelo(s) LLM | **Multi-proveedor, configurable por agente** — Claude, Codex/OpenAI y Gemini deben poder convivir, incluso en el mismo `main` o entre subagentes distintos | Requisito explícito de Rodrigo: no atarse a un solo proveedor. Implica una capa de abstracción/adapter de LLM en el diseño desde el inicio (ver punto abierto 5 arriba). |
+| 9 | Modelo de almacenamiento de estado | **Postgres desde el día uno** | Necesario para namespacing por tenant e integridad referencial de identidades/scopes/auditoría, dado multi-tenancy real. Se descarta SQLite como base final (podría reevaluarse solo para un modo "single-tenant local" a futuro, no decidido). |
+| 10 | Schema de `TaskIntent`/`TaskResult` y modelo de identidad/scopes (entregable 1) | **Aprobado** — ver [docs/design/0001-task-intent-schema.md](docs/design/0001-task-intent-schema.md) | Validado por Rodrigo el 2026-09-09, sin cambios sobre la propuesta v1. |
+| 11 | Estructura del repo y comandos de `meridianctl` | **Aprobado, de momento** — ver [docs/design/0002-repo-structure-and-cli.md](docs/design/0002-repo-structure-and-cli.md) | Validado por Rodrigo el 2026-09-09; puede ampliarse cuando surjan necesidades concretas durante la implementación. |
+| 12 | Sandbox de ejecución/egress de subagentes (entregable 3) | **Restricciones a nivel de contenedor**: segmentación de red (los subagentes no tienen ruta directa a internet) + proxy de egress con allowlist de dominios por subagente + hardening del contenedor (no-root, sin capabilities, filesystem de solo lectura). Sin aprobación humana en el camino crítico por ahora. | Decidido por Rodrigo el 2026-09-09. Coherente con "contenedor por subagente" ya decidido y con "seguro por defecto" de la sección 5: sin declarar dominios explícitos, un subagente no tiene salida a internet. Ver [docs/design/0004-sandbox-exec-model.md](docs/design/0004-sandbox-exec-model.md). |
+| 13 | Orden de trabajo tras el entregable 2 | **Mantener el roadmap**: entregable 3 (sandbox) antes que construir el primer subagente de dominio real | Decidido por Rodrigo el 2026-09-09 — prioriza tener la capa de seguridad antes de exponer un subagente a APIs externas reales. |
+
+## 5. Requisitos de seguridad no negociables para el diseño (aprendidos de la auditoría)
+
+Estos sí son lineamientos ya fijados, a diferencia de la sección 4:
+
+- Seguro por defecto: sandbox y aprobación de ejecución de comandos activados por defecto; el desarrollador debe optar conscientemente por bajar la guardia, nunca al revés.
+- Nunca secretos en texto plano en archivos de config versionables o de estado sin cifrar; usar referencias (`SecretRef`-style) a un mecanismo externo desde el diseño inicial, no como parche posterior.
+- Sin tokens compartidos únicos para "todo el sistema" — cada gateway y cada subagente tiene su propia identidad, rotable y con scopes acotados.
+- Trazabilidad completa: todo mensaje que cruza gateway → main → subagente debe quedar loggeado con su procedencia y correlation_id, para poder auditar quién pidió qué y por qué se delegó.
+- Cualquier extensibilidad de terceros (plugins/skills externos) que se contemple a futuro debe evaluarse con, como mínimo, verificación de checksum/firma — no solo validación declarativa de compatibilidad como hace OpenClaw hoy.
+
+## 6. Cómo trabajar con Rodrigo en este proyecto
+
+- No dar por sentadas decisiones de arquitectura, stack o alcance que aparezcan como "abiertas" en la sección 4 — preguntar explícitamente antes de comprometerse a una implementación concreta.
+- El proyecto es iterativo: van a ir saliendo ideas nuevas en el camino. Cuando surja una decisión relevante no contemplada aquí, añadirla a este documento (nueva entrada en la sección 4 si sigue abierta, o mover a una sección de "Decisiones tomadas" con fecha y justificación si ya se resolvió).
+- Rodrigo trabaja profesionalmente con sistemas de stock/inventario multi-marketplace (Amazon, Liverpool, MercadoLibre, Walmart) para Mercadazo — el diseño debe ser genérico, pero está bien usar ese caso como referencia concreta al validar decisiones.
+- Referencia de investigación previa: la auditoría completa de OpenClaw (arquitectura, seguridad, extensibilidad, configuración) se hizo en una sesión anterior de Claude Code explorando `C:\Users\Rodrigo Romero\openclaw` (código fuente) y `C:\Users\Rodrigo Romero\.openclaw` (instancia en ejecución). Si se necesita revalidar algún detalle técnico de OpenClaw citado en este documento, esas rutas siguen siendo la fuente primaria — no asumir que el resumen de este documento es exhaustivo.
+
+## 7. Roadmap sugerido (propuesta, no decisión final)
+
+- **Entregable 1 (completo):** Definir el schema del mensaje "Task/Intent" (punto abierto 1 de la sección 4) y el modelo de identidad/scopes por gateway/tenant en Postgres, coherente con multi-tenancy real. Incluye: campos obligatorios, versión de schema y política de backward-compatibility, `correlation_id`, y cómo se representa la procedencia (gateway, tenant, scopes) en cada mensaje.
+- **Entregable 2 (completo):** Construir un gateway mínimo (mock) + main agent + 2 subagentes de prueba en contenedores Docker, comunicados por Redis Streams, con el schema del entregable 1. Verificado end-to-end el 2026-09-09 — ver [docs/design/0003-entregable-2-status.md](docs/design/0003-entregable-2-status.md).
+- **Entregable 3 (completo):** Sandbox de red por contenedor (segmentación + proxy de egress con allowlist de dominios, deny-by-default) antes de dar a los subagentes cualquier capacidad de ejecución/llamada externa real. Verificado end-to-end el 2026-09-09 — ver [docs/design/0004-sandbox-exec-model.md](docs/design/0004-sandbox-exec-model.md).
+- **Entregable 4 (completo, enforcement pendiente):** Reglas de comportamiento fijas de plataforma (`behavior/AGENTS.md`, `behavior/IDENTITY.md`) + policy configurable por subagente (qué es irreversible, aprobación, reintentos, tono) vía `meridianctl policy`, ya que Meridian no asume ningún dominio fijo — ver [docs/design/0005-behavior-policy.md](docs/design/0005-behavior-policy.md). Falta conectar esa policy al camino de ejecución real (`main`/subagentes aún no la hacen cumplir, solo existe como datos).
+- **Entregable 5 (completo):** Gateway cron real agregado sin cambios en `main_agent` — validado end-to-end el 2026-09-09, ver [docs/design/0006-cron-gateway.md](docs/design/0006-cron-gateway.md). Falta un tercer gateway (ej. Telegram) si se quiere seguir estresando el contrato con un canal conversacional real.
+- **Entregable 6:** Iterar sobre observabilidad (punto abierto 2), integración de Vault y capa multi-proveedor LLM (punto abierto 3) con datos reales de un caso de uso piloto (el dominio concreto lo elige quien instale Meridian; el de Rodrigo, a modo de ejemplo, sería stock/inventario multi-marketplace).

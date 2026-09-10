@@ -1,0 +1,27 @@
+[project]
+name = "meridian"
+version = "0.1.0"
+description = "Meridian (codename: Project Foreman) - multi-agent orchestration platform"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "redis>=5.0",
+    "psycopg[binary]>=3.1",
+    "hvac>=2.1",
+    "typer>=0.12",
+    "python-dotenv>=1.0",
+    "jsonschema>=4.22",
+    "croniter>=2.0",
+]
+
+[project.scripts]
+meridianctl = "meridian.cli.app:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
