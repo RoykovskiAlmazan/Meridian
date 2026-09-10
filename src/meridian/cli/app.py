@@ -14,6 +14,7 @@ from meridian.cli.commands import (
     dev,
     doctor,
     gateway,
+    init,
     llm,
     policy,
     secrets,
@@ -29,6 +30,7 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
+app.command("init", help="Wizard de instalación: .env + infra + Vault init, en un solo paso.")(init.init)
 app.add_typer(dev.app, name="dev")
 app.add_typer(config.app, name="config")
 app.command("doctor", help="Diagnóstico de salud de la instalación (Docker, Postgres, Redis, Vault, schema), con --fix para autoreparar lo seguro.")(doctor.doctor)
