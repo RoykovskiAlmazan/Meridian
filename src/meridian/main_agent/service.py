@@ -20,6 +20,7 @@ from meridian.bus import redis_bus
 from meridian.identity import repository
 from meridian.logging_setup import configure
 from meridian.main_agent.core import authorize_and_route
+from meridian.policy import requires_approval, resolve_policy
 
 log = configure("main_agent")
 
@@ -63,6 +64,24 @@ def _handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
             "decision": "forwarded",
             "reason": None,
         }]
+
+        # Enforcement de subagent_policy (ver docs/design/0013-policy-enforcement.md): si
+        # este subagente requiere aprobación humana para este intent_type, no se reenvía
+        # de inmediato -- se guarda como pending_approval y se espera a
+        # `meridianctl approvals approve/deny`.
+        policy = resolve_policy(repository.get_subagent_policy(UUID(subagent_id)))
+        if requires_approval(policy, intent["intent"]["type"]):
+            repository.create_pending_approval(
+                UUID(tenant_id), UUID(correlation_id), UUID(subagent_id), forwarded,
+                reason="requires_approval_intents",
+            )
+            repository.log_audit(
+                UUID(tenant_id), UUID(correlation_id), UUID(intent["message_id"]),
+                "main", "pending_approval", {"subagent_id": subagent_id},
+            )
+            log.info("intent=%s -> subagent=%s held for approval", intent["message_id"], subagent_id)
+            continue
+
         redis_bus.publish(redis_bus.intent_stream_for_subagent(subagent_id), forwarded)
         repository.log_audit(
             UUID(tenant_id), UUID(correlation_id), UUID(intent["message_id"]),
@@ -98,20 +117,38 @@ def _handle_result(entry_id: str, result: dict[str, Any]) -> None:
         redis_bus.delete_fanin(correlation_id)
 
 
+def _safe_handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
+    """Un error no manejado aquí NO debe tumbar todo el proceso `main` -- se comprobó en
+    la práctica (un bug de schema hizo crashear el contenedor completo a mitad de un
+    fan-out). Se loguea con contexto completo y se hace ack de todas formas: reintentar
+    un mensaje que falla por un bug de código/esquema solo lo haría fallar de nuevo en
+    loop; el rastro queda en los logs y en `audit_log` (evento 'received' ya se logueó
+    antes de que pudiera fallar el resto)."""
+    try:
+        _handle_intent(entry_id, intent)
+    except Exception:
+        log.exception("unhandled error processing intent=%s", intent.get("message_id"))
+    finally:
+        redis_bus.ack(_INTENT_STREAM, _GROUP, entry_id)
+
+
+def _safe_handle_result(entry_id: str, result: dict[str, Any]) -> None:
+    try:
+        _handle_result(entry_id, result)
+    except Exception:
+        log.exception("unhandled error processing result=%s", result.get("message_id"))
+    finally:
+        redis_bus.ack(_RESULT_STREAM, _GROUP, entry_id)
+
+
 def _reclaim_stale() -> None:
     for entry_id, intent in redis_bus.claim_stale(_INTENT_STREAM, _GROUP, _CONSUMER, max_deliveries=_MAX_DELIVERIES):
         log.warning("reclaimed stale intent=%s, reprocessing", intent.get("message_id"))
-        try:
-            _handle_intent(entry_id, intent)
-        finally:
-            redis_bus.ack(_INTENT_STREAM, _GROUP, entry_id)
+        _safe_handle_intent(entry_id, intent)
 
     for entry_id, result in redis_bus.claim_stale(_RESULT_STREAM, _GROUP, _CONSUMER, max_deliveries=_MAX_DELIVERIES):
         log.warning("reclaimed stale result=%s, reprocessing", result.get("message_id"))
-        try:
-            _handle_result(entry_id, result)
-        finally:
-            redis_bus.ack(_RESULT_STREAM, _GROUP, entry_id)
+        _safe_handle_result(entry_id, result)
 
 
 def run() -> None:
@@ -119,16 +156,10 @@ def run() -> None:
     loop_count = 0
     while True:
         for entry_id, intent in redis_bus.consume(_INTENT_STREAM, _GROUP, _CONSUMER, block_ms=1000):
-            try:
-                _handle_intent(entry_id, intent)
-            finally:
-                redis_bus.ack(_INTENT_STREAM, _GROUP, entry_id)
+            _safe_handle_intent(entry_id, intent)
 
         for entry_id, result in redis_bus.consume(_RESULT_STREAM, _GROUP, _CONSUMER, block_ms=1000):
-            try:
-                _handle_result(entry_id, result)
-            finally:
-                redis_bus.ack(_RESULT_STREAM, _GROUP, entry_id)
+            _safe_handle_result(entry_id, result)
 
         loop_count += 1
         if loop_count % 30 == 0:  # cada ~30 iteraciones (~1 min con block_ms=1000 x2 streams)

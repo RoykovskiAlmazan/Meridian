@@ -19,6 +19,7 @@ _ENV_EXAMPLE = _REPO_ROOT / ".env.example"
 _EXPECTED_TABLES = {
     "tenants", "gateways", "subagents", "gateway_subagent_allowlist",
     "subagent_policy", "cron_jobs", "subagent_llm_config", "audit_log",
+    "subagent_subagent_allowlist", "pending_approvals",
 }
 
 
@@ -61,14 +62,23 @@ def _check_postgres(fix: bool) -> bool:
 
     ok("Postgres alcanzable")
     missing = _EXPECTED_TABLES - existing
-    if not missing:
-        ok("Schema completo (todas las tablas esperadas existen)")
-        return True
 
     if fix:
+        # El schema es 100% idempotente (CREATE TABLE/INDEX IF NOT EXISTS, ALTER ... ADD
+        # COLUMN IF NOT EXISTS, constraints recreadas) -- reaplicarlo siempre con --fix,
+        # no solo cuando falta una tabla completa, porque una tabla puede existir pero con
+        # columnas de una versión vieja del schema (visto en la práctica: parent_subagent_id
+        # no aparecía como tabla faltante, pero sí faltaba como columna).
         from meridian.schema_apply import apply_schema
         apply_schema()
-        ok(f"Schema desactualizado -- se aplicó docker/init/postgres_schema.sql (faltaban: {', '.join(sorted(missing))})")
+        if missing:
+            ok(f"Schema desactualizado -- se aplicó docker/init/postgres_schema.sql (faltaban: {', '.join(sorted(missing))})")
+        else:
+            ok("Schema reaplicado (docker/init/postgres_schema.sql es idempotente -- por si había columnas/constraints nuevas)")
+        return True
+
+    if not missing:
+        ok("Todas las tablas esperadas existen (para columnas/constraints nuevas, corre `doctor --fix`)")
         return True
 
     fail(f"Faltan tablas en Postgres: {', '.join(sorted(missing))} -- corre `doctor --fix` para aplicarlas")

@@ -6,6 +6,7 @@ import typer
 
 from meridian.cli.commands import (
     allow,
+    approvals,
     audit,
     bus,
     config,
@@ -35,6 +36,7 @@ app.add_typer(gateway.app, name="gateway")
 app.add_typer(subagent.app, name="subagent")
 app.add_typer(allow.app, name="allow")
 app.add_typer(policy.app, name="policy")
+app.add_typer(approvals.app, name="approvals")
 app.add_typer(cron.app, name="cron")
 app.add_typer(secrets.app, name="secrets")
 app.add_typer(llm.app, name="llm")

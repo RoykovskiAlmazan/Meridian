@@ -29,3 +29,23 @@ def list_(
         UUID(subagent) if subagent else None,
     )
     print_records(entries, title="Allowlist")
+
+
+@app.command("set-sub")
+def set_sub(
+    parent: str = typer.Option(..., "--parent", help="subagent_id (uuid) del subagente padre que delega"),
+    child: str = typer.Option(..., "--child", help="subagent_id (uuid) del sub-subagente autorizado a recibir la delegación"),
+    intents: str = typer.Option(..., "--intents", help="lista separada por comas -- mismo formato que `allow set`"),
+) -> None:
+    """Allowlist explícita subagente padre -> sub-subagente (ver docs/design/0014-sub-subagents.md).
+    Igual de estricta que gateway -> subagente: sin esta entrada, un subagente no puede
+    delegar en otro aunque exista la relación `parent_subagent_id`."""
+    allowed_intents = [i.strip() for i in intents.split(",") if i.strip()]
+    repository.set_subagent_delegation_allowlist(UUID(parent), UUID(child), allowed_intents)
+    ok(f"allowlist de delegación actualizada: parent={parent} child={child} intents={allowed_intents}")
+
+
+@app.command("list-sub")
+def list_sub(parent: str | None = typer.Option(None, "--parent")) -> None:
+    entries = repository.list_subagent_delegation_allowlist(UUID(parent) if parent else None)
+    print_records(entries, title="Allowlist de delegación (sub-subagentes)")

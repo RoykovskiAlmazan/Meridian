@@ -7,10 +7,12 @@ behavior/AGENTS.md -- son datos configurables por subagente, validados contra
 schemas/subagent_policy.v1.schema.json.
 
 DEFAULT_POLICY es deliberadamente conservador (nada destructivo, todo requiere aprobación)
--- "seguro por defecto" (sección 5 del brief). Nótese que hoy (ver docs/design/0005) el
-`main`/subagentes de prueba NO consultan ni hacen cumplir esta policy todavía: es el modelo
-de datos y la CLI para configurarla, la aplicación en el camino de ejecución queda para
-cuando exista un subagente de dominio real que la necesite.
+-- "seguro por defecto" (sección 5 del brief). El `main` SÍ hace cumplir esto desde el
+entregable de policy enforcement (ver docs/design/0013-policy-enforcement.md): un
+subagente NUEVO, sin `meridianctl policy set` explícito, no ejecuta nada hasta que un
+operador apruebe cada intent con `meridianctl approvals approve`. Esto es intencional, no
+un bug -- si quieres que un subagente opere sin fricción, configúrale una policy explícita
+con `requires_approval_intents: []`.
 """
 from __future__ import annotations
 

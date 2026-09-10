@@ -31,7 +31,8 @@
         "gateway_id": { "type": "string", "minLength": 1 },
         "gateway_type": {
           "type": "string",
-          "enum": ["whatsapp", "telegram", "internal_api", "cron", "web_panel", "other"]
+          "enum": ["whatsapp", "telegram", "internal_api", "cron", "web_panel", "subagent_delegate", "other"],
+          "description": "'subagent_delegate' significa que quien origina este intent no es un gateway externo sino otro subagente delegando en un sub-subagente -- en ese caso gateway_id lleva el id del subagente padre. Ver docs/design/0014-sub-subagents.md."
         },
         "scopes": { "type": "array", "items": { "type": "string" } },
         "credential_ref": { "type": ["string", "null"] }

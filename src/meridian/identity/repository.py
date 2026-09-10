@@ -83,13 +83,13 @@ def list_gateways(tenant_id: UUID | None = None) -> list[dict[str, Any]]:
 
 # ---- subagents ------------------------------------------------------------
 
-def create_subagent(tenant_id: UUID, name: str, domain: str) -> dict[str, Any]:
+def create_subagent(tenant_id: UUID, name: str, domain: str, parent_subagent_id: UUID | None = None) -> dict[str, Any]:
     with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            """INSERT INTO subagents (tenant_id, name, domain)
-               VALUES (%s, %s, %s)
-               RETURNING id, tenant_id, name, domain, status, created_at""",
-            (tenant_id, name, domain),
+            """INSERT INTO subagents (tenant_id, name, domain, parent_subagent_id)
+               VALUES (%s, %s, %s, %s)
+               RETURNING id, tenant_id, name, domain, status, parent_subagent_id, created_at""",
+            (tenant_id, name, domain, parent_subagent_id),
         )
         return cur.fetchone()
 
@@ -97,7 +97,7 @@ def create_subagent(tenant_id: UUID, name: str, domain: str) -> dict[str, Any]:
 def get_subagent(subagent_id: UUID) -> dict[str, Any] | None:
     with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            "SELECT id, tenant_id, name, domain, status, created_at FROM subagents WHERE id = %s",
+            "SELECT id, tenant_id, name, domain, status, parent_subagent_id, created_at FROM subagents WHERE id = %s",
             (subagent_id,),
         )
         return cur.fetchone()
@@ -107,14 +107,94 @@ def list_subagents(tenant_id: UUID | None = None) -> list[dict[str, Any]]:
     with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
         if tenant_id:
             cur.execute(
-                "SELECT id, tenant_id, name, domain, status, created_at FROM subagents WHERE tenant_id = %s ORDER BY created_at",
+                "SELECT id, tenant_id, name, domain, status, parent_subagent_id, created_at FROM subagents WHERE tenant_id = %s ORDER BY created_at",
                 (tenant_id,),
             )
         else:
             cur.execute(
-                "SELECT id, tenant_id, name, domain, status, created_at FROM subagents ORDER BY created_at"
+                "SELECT id, tenant_id, name, domain, status, parent_subagent_id, created_at FROM subagents ORDER BY created_at"
             )
         return cur.fetchall()
+
+
+# ---- delegación subagente -> sub-subagente (ver docs/design/0014-sub-subagents.md) -----
+
+def set_subagent_delegation_allowlist(parent_subagent_id: UUID, child_subagent_id: UUID, allowed_intents: list[str]) -> None:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO subagent_subagent_allowlist (parent_subagent_id, child_subagent_id, allowed_intents)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (parent_subagent_id, child_subagent_id)
+               DO UPDATE SET allowed_intents = EXCLUDED.allowed_intents""",
+            (parent_subagent_id, child_subagent_id, allowed_intents),
+        )
+
+
+def get_subagent_delegation_entry(parent_subagent_id: UUID, child_subagent_id: UUID) -> dict[str, Any] | None:
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """SELECT parent_subagent_id, child_subagent_id, allowed_intents
+               FROM subagent_subagent_allowlist WHERE parent_subagent_id = %s AND child_subagent_id = %s""",
+            (parent_subagent_id, child_subagent_id),
+        )
+        return cur.fetchone()
+
+
+def list_subagent_delegation_allowlist(parent_subagent_id: UUID | None = None) -> list[dict[str, Any]]:
+    query = "SELECT parent_subagent_id, child_subagent_id, allowed_intents, created_at FROM subagent_subagent_allowlist WHERE 1=1"
+    params: list[Any] = []
+    if parent_subagent_id:
+        query += " AND parent_subagent_id = %s"
+        params.append(parent_subagent_id)
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, params)
+        return cur.fetchall()
+
+
+# ---- aprobaciones pendientes (enforcement de subagent_policy) ----------------
+# Ver docs/design/0013-policy-enforcement.md.
+
+def create_pending_approval(tenant_id: UUID, correlation_id: UUID, subagent_id: UUID, intent: dict[str, Any], reason: str) -> dict[str, Any]:
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """INSERT INTO pending_approvals (tenant_id, correlation_id, subagent_id, intent, reason)
+               VALUES (%s, %s, %s, %s, %s)
+               RETURNING id, tenant_id, correlation_id, subagent_id, intent, status, reason, created_at""",
+            (tenant_id, correlation_id, subagent_id, json.dumps(intent), reason),
+        )
+        return cur.fetchone()
+
+
+def get_pending_approval(approval_id: UUID) -> dict[str, Any] | None:
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """SELECT id, tenant_id, correlation_id, subagent_id, intent, status, reason, created_at, decided_at, decided_by
+               FROM pending_approvals WHERE id = %s""",
+            (approval_id,),
+        )
+        return cur.fetchone()
+
+
+def list_pending_approvals(status: str = "pending", tenant_id: UUID | None = None) -> list[dict[str, Any]]:
+    query = """SELECT id, tenant_id, correlation_id, subagent_id, status, reason, created_at, decided_at, decided_by
+               FROM pending_approvals WHERE status = %s"""
+    params: list[Any] = [status]
+    if tenant_id:
+        query += " AND tenant_id = %s"
+        params.append(tenant_id)
+    query += " ORDER BY created_at"
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, params)
+        return cur.fetchall()
+
+
+def decide_pending_approval(approval_id: UUID, status: str, decided_by: str) -> None:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE pending_approvals SET status = %s, decided_at = now(), decided_by = %s
+               WHERE id = %s""",
+            (status, decided_by, approval_id),
+        )
 
 
 # ---- behavior policy (por subagente) -------------------------------------

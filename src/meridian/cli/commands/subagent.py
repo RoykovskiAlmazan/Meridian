@@ -13,9 +13,10 @@ def create(
     tenant: str = typer.Option(..., "--tenant", help="tenant_id (uuid)"),
     name: str = typer.Option(..., "--name"),
     domain: str = typer.Option(..., "--domain", help="Etiqueta libre (tú decides qué significa: 'inventario', 'archivos', 'investigación', lo que sea)."),
+    parent: str = typer.Option(None, "--parent", help="subagent_id (uuid) de otro subagente si este es un sub-subagente delegado (ver docs/design/0014-sub-subagents.md). Omitir para un subagente de primer nivel."),
 ) -> None:
-    subagent = repository.create_subagent(UUID(tenant), name, domain)
-    ok(f"subagente '{name}' creado")
+    subagent = repository.create_subagent(UUID(tenant), name, domain, UUID(parent) if parent else None)
+    ok(f"subagente '{name}' creado" + (f" (hijo de {parent})" if parent else ""))
     print_record(subagent)
 
 

@@ -73,6 +73,8 @@ def run(subagent_id: str, handler: Handler) -> None:
         for entry_id, intent in redis_bus.consume(stream, group, consumer, block_ms=2000):
             try:
                 _process(intent, subagent_id, handler, log)
+            except Exception:
+                log.exception("unhandled error processing intent=%s (outside handler -- e.g. publishing the result failed)", intent.get("message_id"))
             finally:
                 redis_bus.ack(stream, group, entry_id)
 
@@ -82,5 +84,7 @@ def run(subagent_id: str, handler: Handler) -> None:
                 log.warning("reclaimed stale intent=%s, reprocessing", intent.get("message_id"))
                 try:
                     _process(intent, subagent_id, handler, log)
+                except Exception:
+                    log.exception("unhandled error reprocessing reclaimed intent=%s", intent.get("message_id"))
                 finally:
                     redis_bus.ack(stream, group, entry_id)
