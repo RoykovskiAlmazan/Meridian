@@ -51,9 +51,7 @@ Lineamientos ya acordados con Rodrigo (no negociables salvo que él los cambie e
 
 Estas son preguntas abiertas. No elijas por default silenciosamente — plantéalas explícitamente cuando llegue el momento de implementar esa parte, y actualiza este archivo con la respuesta.
 
-1. **Cómo se definen y versionan las reglas de comportamiento/personalidad de la Plataforma** (equivalente propio a `AGENTS.md`/`SOUL.md` de OpenClaw) — Rodrigo quiere documentarlas él mismo; falta decidir el formato y dónde viven en el repo.
-2. **Observabilidad**: qué se loguea, dónde (local vs. servicio externo tipo Prometheus/OTel), y política de retención dado que hay datos de negocio sensibles de por medio. A resolver en roadmap paso 6.
-3. **Interfaz de abstracción multi-proveedor LLM**: cómo se normaliza tool-calling/streaming/costos entre Claude, Codex/OpenAI y Gemini para que main y subagentes puedan mezclar proveedores sin acoplar el resto del sistema a un SDK concreto.
+1. **Interfaz de abstracción multi-proveedor LLM**: cómo se normaliza tool-calling/streaming/costos entre Claude, Codex/OpenAI y Gemini para que main y subagentes puedan mezclar proveedores sin acoplar el resto del sistema a un SDK concreto. Bloqueado en la práctica por necesitar credenciales reales de al menos un proveedor para probar — ver pregunta pendiente a Rodrigo en el chat.
 
 ## 8. Decisiones tomadas
 
@@ -72,6 +70,8 @@ Estas son preguntas abiertas. No elijas por default silenciosamente — plantéa
 | 11 | Estructura del repo y comandos de `meridianctl` | **Aprobado, de momento** — ver [docs/design/0002-repo-structure-and-cli.md](docs/design/0002-repo-structure-and-cli.md) | Validado por Rodrigo el 2026-09-09; puede ampliarse cuando surjan necesidades concretas durante la implementación. |
 | 12 | Sandbox de ejecución/egress de subagentes (entregable 3) | **Restricciones a nivel de contenedor**: segmentación de red (los subagentes no tienen ruta directa a internet) + proxy de egress con allowlist de dominios por subagente + hardening del contenedor (no-root, sin capabilities, filesystem de solo lectura). Sin aprobación humana en el camino crítico por ahora. | Decidido por Rodrigo el 2026-09-09. Coherente con "contenedor por subagente" ya decidido y con "seguro por defecto" de la sección 5: sin declarar dominios explícitos, un subagente no tiene salida a internet. Ver [docs/design/0004-sandbox-exec-model.md](docs/design/0004-sandbox-exec-model.md). |
 | 13 | Orden de trabajo tras el entregable 2 | **Mantener el roadmap**: entregable 3 (sandbox) antes que construir el primer subagente de dominio real | Decidido por Rodrigo el 2026-09-09 — prioriza tener la capa de seguridad antes de exponer un subagente a APIs externas reales. |
+| 14 | Formato de reglas de comportamiento | **`behavior/AGENTS.md` (fijo, sin dominio) + policy configurable por subagente en Postgres** | Ver [docs/design/0005-behavior-policy.md](docs/design/0005-behavior-policy.md). Resuelto tras la corrección de Rodrigo de que Meridian no debe asumir ningún dominio (2026-09-09). |
+| 15 | Observabilidad | **Logs JSON a stdout (local) + `audit_log` en Postgres como fuente de verdad de auditoría + `meridianctl audit prune` para retención configurable (sugerido 90 días)**. Sin Prometheus/OTel por ahora. | Decisión tomada de forma autónoma el 2026-09-10 con instrucción explícita de Rodrigo de continuar el roadmap sin pausar por cada punto — ver [docs/design/0008-observability.md](docs/design/0008-observability.md). Revisable si aparece un requisito concreto de monitoreo externo. |
 
 ## 5. Requisitos de seguridad no negociables para el diseño (aprendidos de la auditoría)
 

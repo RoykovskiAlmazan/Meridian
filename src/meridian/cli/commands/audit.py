@@ -20,3 +20,11 @@ def tail(
     )
     for entry in entries:
         typer.echo(entry)
+
+
+@app.command("prune")
+def prune(
+    older_than_days: int = typer.Option(90, "--older-than-days", help="Borra audit_log más viejo que N días (default 90 -- ajustable según tus propios requisitos de retención/cumplimiento)."),
+) -> None:
+    deleted = repository.prune_audit_log(older_than_days)
+    typer.echo(f"{deleted} entradas de audit_log borradas (más viejas que {older_than_days} días)")

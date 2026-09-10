@@ -8,19 +8,18 @@ de mensajes y el fan-out/fan-in funcionan de punta a punta.
 """
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from meridian.bus import redis_bus
+from meridian.logging_setup import configure
 from meridian.messages import new_task_result
 
 Handler = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 def run(subagent_id: str, handler: Handler) -> None:
-    logging.basicConfig(level=logging.INFO, format=f"%(asctime)s subagent:{subagent_id} %(message)s")
-    log = logging.getLogger(f"meridian.subagent.{subagent_id}")
+    log = configure(f"subagent:{subagent_id}")
 
     stream = redis_bus.intent_stream_for_subagent(subagent_id)
     group = "subagent"
@@ -42,7 +41,10 @@ def run(subagent_id: str, handler: Handler) -> None:
                     output=output,
                 )
             except Exception as exc:  # noqa: BLE001 -- se reporta como TaskResult de error, no se relanza
-                log.exception("handler failed for intent=%s", intent["message_id"])
+                log.exception(
+                    "handler failed for intent=%s", intent["message_id"],
+                    extra={"extra_fields": {"correlation_id": intent["correlation_id"], "message_id": intent["message_id"]}},
+                )
                 result = new_task_result(
                     correlation_id=intent["correlation_id"],
                     in_response_to=intent["message_id"],
@@ -54,4 +56,7 @@ def run(subagent_id: str, handler: Handler) -> None:
                 )
             redis_bus.publish_result_to_main(result)
             redis_bus.ack(stream, group, entry_id)
-            log.info("processed intent=%s status=%s", intent["message_id"], result["status"])
+            log.info(
+                "processed intent=%s status=%s", intent["message_id"], result["status"],
+                extra={"extra_fields": {"correlation_id": intent["correlation_id"], "message_id": intent["message_id"], "status": result["status"]}},
+            )

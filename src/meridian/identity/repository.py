@@ -261,6 +261,19 @@ def log_audit(
         )
 
 
+def prune_audit_log(older_than_days: int) -> int:
+    """Borra entradas de audit_log más viejas que `older_than_days`. Ver
+    docs/design/0008-observability.md para la política de retención por defecto (90 días)
+    -- quien instale Meridian puede correr esto vía cron/`meridianctl audit prune` con el
+    período que le convenga según sus propios requisitos de negocio/cumplimiento."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM audit_log WHERE created_at < now() - (%s || ' days')::interval",
+            (older_than_days,),
+        )
+        return cur.rowcount
+
+
 def tail_audit(tenant_id: UUID | None = None, correlation_id: UUID | None = None, limit: int = 50) -> list[dict[str, Any]]:
     query = "SELECT id, tenant_id, correlation_id, message_id, agent_id, event_type, detail, created_at FROM audit_log WHERE 1=1"
     params: list[Any] = []

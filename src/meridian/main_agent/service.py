@@ -9,17 +9,16 @@ de un entregable posterior si la carga real lo justifica.
 """
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from meridian.bus import redis_bus
 from meridian.identity import repository
+from meridian.logging_setup import configure
 from meridian.main_agent.core import authorize_and_route
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s main %(message)s")
-log = logging.getLogger("meridian.main_agent")
+log = configure("main_agent")
 
 _GROUP = "main"
 _CONSUMER = "main-1"

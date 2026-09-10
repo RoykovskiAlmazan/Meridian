@@ -10,7 +10,6 @@ que la fila describe.
 """
 from __future__ import annotations
 
-import logging
 import time
 from datetime import datetime, timezone
 
@@ -18,10 +17,10 @@ from croniter import croniter
 
 from meridian.bus.redis_bus import publish_intent_to_main
 from meridian.identity import repository
+from meridian.logging_setup import configure
 from meridian.messages import new_task_intent
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s cron_gateway %(message)s")
-log = logging.getLogger("meridian.cron_gateway")
+log = configure("cron_gateway")
 
 POLL_INTERVAL_SECONDS = 15
 
