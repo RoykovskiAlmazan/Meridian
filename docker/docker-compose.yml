@@ -141,6 +141,8 @@ services:
       SUBAGENT_ID: ${SUBAGENT_A_ID:-}
       HTTP_PROXY: http://egress_proxy:3128
       HTTPS_PROXY: http://egress_proxy:3128
+      NO_PROXY: postgres,redis,vault,localhost,127.0.0.1
+      no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       - postgres
@@ -169,6 +171,8 @@ services:
       SUBAGENT_ID: ${SUBAGENT_B_ID:-}
       HTTP_PROXY: http://egress_proxy:3128
       HTTPS_PROXY: http://egress_proxy:3128
+      NO_PROXY: postgres,redis,vault,localhost,127.0.0.1
+      no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       - postgres
@@ -201,6 +205,8 @@ services:
       SUBAGENT_ID: ${PAPER_SEARCH_SUBAGENT_ID:-}
       HTTP_PROXY: http://egress_proxy:3128
       HTTPS_PROXY: http://egress_proxy:3128
+      NO_PROXY: postgres,redis,vault,localhost,127.0.0.1
+      no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       - postgres
@@ -229,6 +235,8 @@ services:
       SUBAGENT_ID: ${PAPER_SUMMARIZER_SUBAGENT_ID:-}
       HTTP_PROXY: http://egress_proxy:3128
       HTTPS_PROXY: http://egress_proxy:3128
+      NO_PROXY: postgres,redis,vault,localhost,127.0.0.1
+      no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       - postgres

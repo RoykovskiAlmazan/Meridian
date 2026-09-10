@@ -66,10 +66,20 @@ Se amplió la allowlist de `paper_summarizer` (IP `172.28.1.13`) en
 `docker/sandbox/squid.conf` para incluir `.anthropic.com` y `.openai.com`, además de
 `.arxiv.org` que ya tenía.
 
-## 6. Pendiente (una vez guardes tu API key)
+## 6. Verificado end-to-end con la API key real de Rodrigo
 
-1. Correr los comandos de la sección 2 con tu key real.
-2. Reconstruir `paper_summarizer` (`docker compose ... up -d --build paper_summarizer`) y
-   volver a disparar `research.find_papers` para confirmar que el resumen ahora viene
-   marcado como `"summary_method": "llm:anthropic/claude-sonnet-5"` (o el proveedor/modelo
-   que elijas) en vez de `"extractive"`.
+Confirmado el 2026-09-10: `meridianctl llm test` respondió `'ok'` real de
+`anthropic/claude-sonnet-5`, y un `research.find_papers` disparado vía el mock gateway
+devolvió un resumen real (no extractivo) con `"summary_method":
+"llm:anthropic/claude-sonnet-5"`.
+
+### Bug encontrado y corregido: `HTTP_PROXY` capturaba también el tráfico a Vault
+
+Al fijar `HTTP_PROXY`/`HTTPS_PROXY` a nivel de todo el contenedor (para que las llamadas a
+arXiv/Anthropic pasen por el egress proxy), **también** se enrutaban por ahí las llamadas
+internas a Vault (`http://vault:8200`) -- Squid las rechazaba con `403` por no estar en la
+allowlist de dominios externos (correctamente: Vault no debería salir a internet). Se
+corrigió agregando `NO_PROXY`/`no_proxy` con los hostnames de los servicios internos
+(`postgres,redis,vault,localhost,127.0.0.1`) a los 4 subagentes que usan el proxy en
+`docker/docker-compose.yml`, para que el tráfico interno siga la ruta directa
+(`meridian_internal`) y solo el tráfico externo real pase por `egress_proxy`.
