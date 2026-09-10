@@ -2,10 +2,13 @@
 luego consume TaskResult de subagentes y agrega por correlation_id (fan-in) antes de
 publicar el resultado final al stream del gateway de origen.
 
-MVP: el estado de agregación en curso vive en memoria del proceso -- si el `main` se
-reinicia a mitad de un fan-out, esa agregación se pierde. Aceptable para el entregable 2
-(2 subagentes de prueba); persistir el estado de agregación en Postgres/Redis es trabajo
-de un entregable posterior si la carga real lo justifica.
+El estado de agregación en curso vive en Redis (`redis_bus.init_fanin`/`add_fanin_result`),
+no en memoria del proceso -- así un reinicio del `main` a mitad de un fan-out no pierde la
+agregación (ver docs/design/0012-improvement-opportunities.md, mejora ya implementada).
+
+También reclama periódicamente mensajes que quedaron "pending" sin ack (un consumer que
+murió a mitad de procesar) vía `redis_bus.claim_stale`, con dead-letter automático tras
+demasiados reintentos -- ver el mismo documento.
 """
 from __future__ import annotations
 
@@ -22,9 +25,9 @@ log = configure("main_agent")
 
 _GROUP = "main"
 _CONSUMER = "main-1"
-
-# correlation_id -> {"gateway_id": str, "expected": set[str], "results": dict[str, dict]}
-_pending: dict[str, dict[str, Any]] = {}
+_INTENT_STREAM = "meridian:intents:main"
+_RESULT_STREAM = "meridian:results:main"
+_MAX_DELIVERIES = 3
 
 
 def _handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
@@ -48,11 +51,7 @@ def _handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
         log.info("denied intent=%s subagent=%s reason=%s", intent["message_id"], subagent_id, reason)
 
     if decision.allowed_subagent_ids:
-        _pending[correlation_id] = {
-            "gateway_id": gateway_id,
-            "expected": set(decision.allowed_subagent_ids),
-            "results": {},
-        }
+        redis_bus.init_fanin(correlation_id, gateway_id, decision.allowed_subagent_ids)
 
     for subagent_id in decision.allowed_subagent_ids:
         forwarded = dict(intent)
@@ -79,41 +78,61 @@ def _handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
 
 def _handle_result(entry_id: str, result: dict[str, Any]) -> None:
     correlation_id = result["correlation_id"]
-    pending = _pending.get(correlation_id)
-    if pending is None:
+    state = redis_bus.add_fanin_result(correlation_id, result["subagent_id"], result)
+    if state is None:
         log.warning("result for unknown/expired correlation_id=%s, dropping", correlation_id)
         return
 
-    pending["results"][result["subagent_id"]] = result
     repository.log_audit(
         UUID(result["tenant_id"]), UUID(correlation_id), UUID(result["message_id"]),
         "main", "completed", {"subagent_id": result["subagent_id"], "status": result["status"]},
     )
 
-    if pending["expected"] <= pending["results"].keys():
+    if set(state["expected"]) <= state["results"].keys():
         aggregated = {
             "correlation_id": correlation_id,
-            "results": list(pending["results"].values()),
+            "results": list(state["results"].values()),
         }
-        redis_bus.publish(redis_bus.result_stream_for_gateway(pending["gateway_id"]), aggregated)
-        log.info("correlation_id=%s fan-in complete, published to gateway=%s", correlation_id, pending["gateway_id"])
-        del _pending[correlation_id]
+        redis_bus.publish(redis_bus.result_stream_for_gateway(state["gateway_id"]), aggregated)
+        log.info("correlation_id=%s fan-in complete, published to gateway=%s", correlation_id, state["gateway_id"])
+        redis_bus.delete_fanin(correlation_id)
+
+
+def _reclaim_stale() -> None:
+    for entry_id, intent in redis_bus.claim_stale(_INTENT_STREAM, _GROUP, _CONSUMER, max_deliveries=_MAX_DELIVERIES):
+        log.warning("reclaimed stale intent=%s, reprocessing", intent.get("message_id"))
+        try:
+            _handle_intent(entry_id, intent)
+        finally:
+            redis_bus.ack(_INTENT_STREAM, _GROUP, entry_id)
+
+    for entry_id, result in redis_bus.claim_stale(_RESULT_STREAM, _GROUP, _CONSUMER, max_deliveries=_MAX_DELIVERIES):
+        log.warning("reclaimed stale result=%s, reprocessing", result.get("message_id"))
+        try:
+            _handle_result(entry_id, result)
+        finally:
+            redis_bus.ack(_RESULT_STREAM, _GROUP, entry_id)
 
 
 def run() -> None:
-    log.info("main agent starting, listening on %s and %s", "meridian:intents:main", "meridian:results:main")
+    log.info("main agent starting, listening on %s and %s", _INTENT_STREAM, _RESULT_STREAM)
+    loop_count = 0
     while True:
-        for entry_id, intent in redis_bus.consume("meridian:intents:main", _GROUP, _CONSUMER, block_ms=1000):
+        for entry_id, intent in redis_bus.consume(_INTENT_STREAM, _GROUP, _CONSUMER, block_ms=1000):
             try:
                 _handle_intent(entry_id, intent)
             finally:
-                redis_bus.ack("meridian:intents:main", _GROUP, entry_id)
+                redis_bus.ack(_INTENT_STREAM, _GROUP, entry_id)
 
-        for entry_id, result in redis_bus.consume("meridian:results:main", _GROUP, _CONSUMER, block_ms=1000):
+        for entry_id, result in redis_bus.consume(_RESULT_STREAM, _GROUP, _CONSUMER, block_ms=1000):
             try:
                 _handle_result(entry_id, result)
             finally:
-                redis_bus.ack("meridian:results:main", _GROUP, entry_id)
+                redis_bus.ack(_RESULT_STREAM, _GROUP, entry_id)
+
+        loop_count += 1
+        if loop_count % 30 == 0:  # cada ~30 iteraciones (~1 min con block_ms=1000 x2 streams)
+            _reclaim_stale()
 
 
 if __name__ == "__main__":

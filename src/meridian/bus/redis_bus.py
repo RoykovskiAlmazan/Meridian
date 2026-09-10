@@ -75,6 +75,97 @@ def ack(stream: str, group: str, entry_id: str) -> None:
     get_client().xack(stream, group, entry_id)
 
 
+def claim_stale(
+    stream: str, group: str, consumer: str, min_idle_ms: int = 60_000, max_deliveries: int = 3
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Reclama mensajes que quedaron "pending" (leídos por un consumer que murió antes de
+    hacer ack) más de `min_idle_ms` sin confirmar, vía XAUTOCLAIM. Si un mensaje ya se
+    entregó `max_deliveries` veces o más, se manda a `<stream>:dead` (dead-letter) y se
+    hace ack del original -- deja de reintentarse solo, pero no se pierde: queda auditable
+    en el stream de dead-letter para revisión manual. Los demás se devuelven al caller para
+    que los reprocese con el mismo `handler`, igual que un mensaje nuevo.
+
+    Sin esto, un subagente que se cae a mitad de procesar un intent lo deja "colgado" para
+    siempre en el pending list del consumer group -- ver docs/design/0012-improvement-opportunities.md.
+    """
+    ensure_group(stream, group)
+    client = get_client()
+    dead_letter_stream = f"{stream}:dead"
+
+    _cursor, claimed, _deleted = client.xautoclaim(
+        stream, group, consumer, min_idle_time=min_idle_ms, start_id="0-0", count=50
+    )
+    for entry_id, fields in claimed:
+        if not fields:  # el mensaje ya no existe en el stream (fue trimmed)
+            client.xack(stream, group, entry_id)
+            continue
+
+        delivery_count = None
+        pending_detail = client.xpending_range(stream, group, min=entry_id, max=entry_id, count=1)
+        if pending_detail:
+            delivery_count = pending_detail[0]["times_delivered"]
+
+        if delivery_count is not None and delivery_count > max_deliveries:
+            client.xadd(dead_letter_stream, {
+                "data": fields["data"],
+                "original_entry_id": entry_id,
+                "delivery_count": str(delivery_count),
+            })
+            client.xack(stream, group, entry_id)
+            continue  # no se reprocesa -- queda constancia en <stream>:dead
+
+        yield entry_id, json.loads(fields["data"])
+
+
+# ---- estado de fan-in (persistente en Redis, no en memoria del proceso) --------
+# Antes vivía en un dict de Python dentro de main_agent/service.py: si el `main` se
+# reiniciaba a mitad de un fan-out, la agregación en curso se perdía (documentado desde el
+# entregable 2). Guardarlo en Redis lo hace sobrevivir un reinicio del `main`.
+
+_FANIN_TTL_SECONDS = 24 * 60 * 60
+
+
+def _fanin_key(correlation_id: str) -> str:
+    return f"meridian:fanin:{correlation_id}"
+
+
+def init_fanin(correlation_id: str, gateway_id: str, expected_subagent_ids: list[str]) -> None:
+    client = get_client()
+    key = _fanin_key(correlation_id)
+    client.hset(key, mapping={
+        "gateway_id": gateway_id,
+        "expected": json.dumps(expected_subagent_ids),
+        "results": json.dumps({}),
+    })
+    client.expire(key, _FANIN_TTL_SECONDS)
+
+
+def add_fanin_result(correlation_id: str, subagent_id: str, result: dict[str, Any]) -> dict[str, Any] | None:
+    """Agrega un resultado a la agregación en curso. Devuelve el estado completo
+    (gateway_id/expected/results) si ya existe la fila en Redis, o None si no existe
+    (mensaje huérfano: no hay fan-out en curso con ese correlation_id -- ya se agregó y
+    se borró, o nunca se inicializó)."""
+    client = get_client()
+    key = _fanin_key(correlation_id)
+    raw = client.hgetall(key)
+    if not raw:
+        return None
+
+    results = json.loads(raw["results"])
+    results[subagent_id] = result
+    client.hset(key, "results", json.dumps(results))
+
+    return {
+        "gateway_id": raw["gateway_id"],
+        "expected": json.loads(raw["expected"]),
+        "results": results,
+    }
+
+
+def delete_fanin(correlation_id: str) -> None:
+    get_client().delete(_fanin_key(correlation_id))
+
+
 def stream_info(stream: str) -> dict[str, Any]:
     client = get_client()
     try:
