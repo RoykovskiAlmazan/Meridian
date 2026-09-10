@@ -26,7 +26,8 @@ clientes, o cualquier otra combinación de tareas automatizadas.
   texto plano (todo vía referencias a Vault); allowlist explícita gateway↔subagente, nunca
   implícita.
 - **Todo administrable desde consola** (`meridianctl`) — sin depender de un panel web.
-- **Multi-proveedor LLM**: Anthropic, OpenAI (Gemini pendiente), configurable por subagente.
+- **Multi-proveedor LLM**: Anthropic, OpenAI, Gemini, Groq, xAI (Grok) — configurable por subagente.
+- **Multi-motor de base de datos**: Postgres (default), MySQL, MSSQL vía `DB_BACKEND` — ver [docs/design/0017-database-compatibility.md](docs/design/0017-database-compatibility.md).
 
 ## Requisitos
 

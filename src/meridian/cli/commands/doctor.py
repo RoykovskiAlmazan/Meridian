@@ -47,41 +47,40 @@ def _check_docker() -> bool:
     return True
 
 
-def _check_postgres(fix: bool) -> bool:
+def _check_database(fix: bool) -> bool:
     try:
-        import psycopg
-        with psycopg.connect(settings.postgres_dsn, connect_timeout=3) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
-                )
-                existing = {row[0] for row in cur.fetchall()}
+        from sqlalchemy import inspect
+
+        from meridian.identity.db import get_engine
+        engine = get_engine()
+        with engine.connect():
+            existing = set(inspect(engine).get_table_names())
     except Exception as exc:  # noqa: BLE001
-        fail(f"Postgres no alcanzable: {exc}")
+        fail(f"Base de datos ({settings.db_backend}) no alcanzable: {exc}")
         return False
 
-    ok("Postgres alcanzable")
+    ok(f"Base de datos ({settings.db_backend}) alcanzable")
     missing = _EXPECTED_TABLES - existing
 
     if fix:
-        # El schema es 100% idempotente (CREATE TABLE/INDEX IF NOT EXISTS, ALTER ... ADD
-        # COLUMN IF NOT EXISTS, constraints recreadas) -- reaplicarlo siempre con --fix,
-        # no solo cuando falta una tabla completa, porque una tabla puede existir pero con
-        # columnas de una versión vieja del schema (visto en la práctica: parent_subagent_id
-        # no aparecía como tabla faltante, pero sí faltaba como columna).
+        # El schema (SQLAlchemy Core, ver meridian.identity.schema_meta) es idempotente
+        # por diseño de `metadata.create_all()` -- reaplicarlo siempre con --fix es
+        # seguro. Nota: create_all() NO agrega columnas a una tabla que ya existe con un
+        # schema viejo (solo crea tablas completas que faltan) -- una migración real de
+        # columnas necesitaría una herramienta tipo Alembic (ver docs/design/0012).
         from meridian.schema_apply import apply_schema
         apply_schema()
         if missing:
-            ok(f"Schema desactualizado -- se aplicó docker/init/postgres_schema.sql (faltaban: {', '.join(sorted(missing))})")
+            ok(f"Schema desactualizado -- se aplicó (faltaban: {', '.join(sorted(missing))})")
         else:
-            ok("Schema reaplicado (docker/init/postgres_schema.sql es idempotente -- por si había columnas/constraints nuevas)")
+            ok("Schema reaplicado (idempotente -- por si había tablas nuevas)")
         return True
 
     if not missing:
-        ok("Todas las tablas esperadas existen (para columnas/constraints nuevas, corre `doctor --fix`)")
+        ok("Todas las tablas esperadas existen")
         return True
 
-    fail(f"Faltan tablas en Postgres: {', '.join(sorted(missing))} -- corre `doctor --fix` para aplicarlas")
+    fail(f"Faltan tablas: {', '.join(sorted(missing))} -- corre `doctor --fix` para aplicarlas")
     return False
 
 
@@ -142,7 +141,7 @@ def _check_schemas_dir() -> bool:
 
 
 def doctor(
-    fix: bool = typer.Option(False, "--fix", help="Intenta reparar automáticamente lo que es seguro arreglar (crear .env desde el ejemplo, aplicar tablas de Postgres faltantes)."),
+    fix: bool = typer.Option(False, "--fix", help="Intenta reparar automáticamente lo que es seguro arreglar (crear .env desde el ejemplo, aplicar tablas faltantes en la base de datos)."),
 ) -> None:
     console.print("[bold]Meridian doctor[/bold] -- diagnóstico de la instalación\n")
 
@@ -151,11 +150,11 @@ def doctor(
     results.append(_check_docker())
 
     if results[-1]:
-        results.append(_check_postgres(fix))
+        results.append(_check_database(fix))
         results.append(_check_redis())
         results.append(_check_vault())
     else:
-        info("se omiten los chequeos de Postgres/Redis/Vault -- Docker no está listo")
+        info("se omiten los chequeos de base de datos/Redis/Vault -- Docker no está listo")
 
     results.append(_check_schemas_dir())
 

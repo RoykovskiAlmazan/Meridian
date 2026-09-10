@@ -1,38 +1,20 @@
-"""Aplica docker/init/postgres_schema.sql contra la base configurada -- útil para
-`meridianctl doctor --fix` cuando un volumen de Postgres ya existía antes de agregar una
-tabla nueva (el init script de Docker solo corre en un volumen vacío la primera vez).
+"""Aplica el schema (SQLAlchemy Core, ver `meridian.identity.schema_meta`) contra la base
+configurada -- útil para `meridianctl doctor --fix` cuando una base ya existía antes de
+agregar una tabla nueva.
 
-El schema es 100% idempotente (`CREATE TABLE/INDEX IF NOT EXISTS`), así que aplicarlo de
-más nunca rompe nada -- ver docker/init/postgres_schema.sql.
+`metadata.create_all()` es idempotente por diseño de SQLAlchemy (revisa qué tablas ya
+existen antes de crear), y funciona igual contra Postgres/MySQL/MSSQL -- ver
+docs/design/0017-database-compatibility.md. A diferencia del script SQL crudo que se usó
+hasta el entregable de compatibilidad de bases de datos, esto NO agrega columnas nuevas a
+una tabla que ya existe con un schema viejo (create_all únicamente crea tablas que faltan
+por completo) -- una migración real de columnas requeriría una herramienta tipo Alembic,
+fuera de alcance por ahora (ver docs/design/0012-improvement-opportunities.md).
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
-from meridian.identity.db import get_conn
-
-
-def _find_schema_file() -> Path:
-    override = os.environ.get("MERIDIAN_SCHEMA_FILE")
-    if override:
-        return Path(override)
-
-    candidates = [
-        Path(__file__).resolve().parents[2] / "docker" / "init" / "postgres_schema.sql",
-        Path.cwd() / "docker" / "init" / "postgres_schema.sql",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    raise FileNotFoundError(
-        "No se encontró docker/init/postgres_schema.sql en ninguna ubicación candidata "
-        f"({[str(c) for c in candidates]}). Define MERIDIAN_SCHEMA_FILE explícitamente."
-    )
+from meridian.identity.db import get_engine
+from meridian.identity.schema_meta import metadata
 
 
 def apply_schema() -> None:
-    sql = _find_schema_file().read_text(encoding="utf-8")
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql)
+    metadata.create_all(get_engine())

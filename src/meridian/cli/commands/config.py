@@ -12,12 +12,12 @@ def check() -> None:
     healthy = True
 
     try:
-        import psycopg
-        with psycopg.connect(settings.postgres_dsn, connect_timeout=3):
-            ok_msg("postgres alcanzable")
+        from meridian.identity.db import get_engine
+        with get_engine().connect():
+            ok_msg(f"base de datos ({settings.db_backend}) alcanzable")
     except Exception as exc:  # noqa: BLE001
         healthy = False
-        fail(f"postgres: {exc}")
+        fail(f"base de datos: {exc}")
 
     try:
         from meridian.bus.redis_bus import get_client

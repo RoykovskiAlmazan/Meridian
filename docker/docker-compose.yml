@@ -33,6 +33,11 @@ networks:
     driver: bridge
 
 services:
+  # Backend de base de datos por defecto (DB_BACKEND=postgres). El schema real ahora vive
+  # en meridian/identity/schema_meta.py (SQLAlchemy Core, portable) -- este init script
+  # SQL crudo se mantiene solo por compatibilidad con instalaciones que ya lo usaban;
+  # corre igual en una base nueva, y `meridianctl doctor --fix` (que sí usa schema_meta.py)
+  # cubre lo mismo si prefieres no depender de él. Ver docs/design/0017-database-compatibility.md.
   postgres:
     image: postgres:16
     environment:
@@ -49,6 +54,30 @@ services:
       - meridian_hostnet
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Alternativa opcional a Postgres -- ver docs/design/0017-database-compatibility.md.
+  # Para usarla: DB_BACKEND=mysql, DB_HOST=localhost, DB_PORT=3307 en tu .env, y
+  #   docker compose -f docker/docker-compose.yml --profile mysql-db up -d mysql
+  #   meridianctl doctor --fix   (crea el schema en MySQL vía schema_meta.py)
+  mysql:
+    profiles: ["mysql-db"]
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: meridian
+      MYSQL_USER: meridian
+      MYSQL_PASSWORD: meridian_dev_only
+      MYSQL_ROOT_PASSWORD: meridian_root_dev_only
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - meridian_hostnet
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pmeridian_root_dev_only"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -326,3 +355,4 @@ services:
 volumes:
   postgres_data:
   vault_data:
+  mysql_data:
