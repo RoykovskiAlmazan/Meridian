@@ -1,5 +1,7 @@
 """Resuelve qué LLMProvider usar para un subagente dado, a partir de su configuración en
-Postgres (`subagent_llm_config`) + la credencial real resuelta en runtime desde Vault.
+Postgres (`subagent_llm_config`) + la credencial real resuelta en runtime -- de Vault o de
+un backend de nube (AWS/GCP/Azure, ver `meridian.secrets.resolver` y
+docs/design/0019-cloud-secret-backends.md), según el prefijo del `credential_ref`.
 Ningún subagente ni el `main` deben instanciar un SDK de proveedor directamente -- siempre
 pasan por aquí, para poder mezclar proveedores por subagente sin acoplar el resto del
 sistema a un SDK concreto (decisión #8 del brief).
@@ -10,7 +12,7 @@ from uuid import UUID
 
 from meridian.identity import repository
 from meridian.llm.base import LLMProvider
-from meridian.secrets.vault_client import resolve_secret_ref
+from meridian.secrets.resolver import resolve_secret_ref
 
 
 def _build(provider: str, model: str, api_key: str) -> LLMProvider:

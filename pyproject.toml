@@ -28,12 +28,19 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "fakeredis>=2.23",
+    "moto[secretsmanager]>=5.0",
 ]
 # DB_BACKEND=mssql requiere además el driver ODBC de Microsoft instalado a nivel de SO
 # (no es instalable solo con pip) -- ver docs/design/0017-database-compatibility.md.
 mssql = [
     "pyodbc>=5.1",
 ]
+# Backends de secretos en la nube -- ver docs/design/0019-cloud-secret-backends.md.
+# Cada uno se importa solo si un SecretRef usa ese prefijo, así que instalarlos es
+# opcional: solo hace falta el SDK del proveedor que realmente uses.
+aws = ["boto3>=1.34"]
+gcp = ["google-cloud-secret-manager>=2.20"]
+azure = ["azure-keyvault-secrets>=4.8", "azure-identity>=1.16"]
 
 [project.scripts]
 meridianctl = "meridian.cli.app:app"
