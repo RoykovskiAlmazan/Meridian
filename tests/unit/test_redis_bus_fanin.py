@@ -47,3 +47,17 @@ def test_fanin_state_survives_a_simulated_main_restart():
     # "reinicio": ninguna variable de proceso se reutiliza, solo se vuelve a leer de Redis
     state_after_restart = redis_bus.add_fanin_result("corr-3", "sa-2", {"subagent_id": "sa-2", "status": "success"})
     assert set(state_after_restart["expected"]) <= state_after_restart["results"].keys()
+
+
+def test_tail_gateway_results_returns_most_recent_first(fake_redis_client):
+    stream = redis_bus.result_stream_for_gateway("gw-1")
+    for i in range(3):
+        fake_redis_client.xadd(stream, {"data": f'{{"correlation_id": "corr-{i}", "results": []}}'})
+
+    aggregates = redis_bus.tail_gateway_results("gw-1", limit=2)
+
+    assert [a["correlation_id"] for a in aggregates] == ["corr-2", "corr-1"]
+
+
+def test_tail_gateway_results_on_nonexistent_gateway_returns_empty():
+    assert redis_bus.tail_gateway_results("no-such-gateway") == []

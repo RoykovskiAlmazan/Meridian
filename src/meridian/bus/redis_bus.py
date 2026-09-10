@@ -166,6 +166,21 @@ def delete_fanin(correlation_id: str) -> None:
     get_client().delete(_fanin_key(correlation_id))
 
 
+def tail_gateway_results(gateway_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Lee (sin consumir/hacer ack -- XRANGE, igual que `mock_gateway`'s `/result`) las
+    últimas `limit` entradas del stream de resultados agregados de un gateway, más reciente
+    primero. Sirve para inspeccionar desde `meridianctl results tail` el resultado real de
+    un intent disparado por cualquier gateway (cron incluido, que no tiene un endpoint HTTP
+    propio para consultarlo como mock_gateway sí tiene)."""
+    client = get_client()
+    stream = result_stream_for_gateway(gateway_id)
+    try:
+        entries = client.xrevrange(stream, count=limit)
+    except redis.ResponseError:
+        return []
+    return [json.loads(fields["data"]) for _entry_id, fields in entries]
+
+
 def stream_info(stream: str) -> dict[str, Any]:
     client = get_client()
     try:
