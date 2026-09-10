@@ -36,6 +36,11 @@ class Settings:
 
     mock_gateway_port: int = int(os.getenv("MOCK_GATEWAY_PORT", "8080"))
 
+    # Nombre exacto del driver ODBC instalado en esta máquina -- varía según cuándo se
+    # instaló ("ODBC Driver 17 for SQL Server" vs. "...18..."). Configurable porque no
+    # todas las máquinas tienen la misma versión.
+    mssql_odbc_driver: str = os.getenv("MSSQL_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
+
     @property
     def database_url(self) -> str:
         """URL de SQLAlchemy para el backend configurado -- ver
@@ -45,7 +50,8 @@ class Settings:
         if self.db_backend == "mysql":
             return f"mysql+pymysql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
         if self.db_backend == "mssql":
-            return f"mssql+pyodbc://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+            driver = self.mssql_odbc_driver.replace(" ", "+")
+            return f"mssql+pyodbc://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}?driver={driver}&TrustServerCertificate=yes"
         raise ValueError(f"DB_BACKEND no soportado: {self.db_backend!r} (usa postgres | mysql | mssql)")
 
 

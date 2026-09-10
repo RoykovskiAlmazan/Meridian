@@ -27,7 +27,7 @@ clientes, o cualquier otra combinación de tareas automatizadas.
   implícita.
 - **Todo administrable desde consola** (`meridianctl`) — sin depender de un panel web.
 - **Multi-proveedor LLM**: Anthropic, OpenAI, Gemini, Groq, xAI (Grok) — configurable por subagente.
-- **Multi-motor de base de datos**: Postgres (default), MySQL, MSSQL vía `DB_BACKEND` — ver [docs/design/0017-database-compatibility.md](docs/design/0017-database-compatibility.md).
+- **Multi-motor de base de datos**: Postgres (default), MySQL, MSSQL vía `DB_BACKEND` — los tres verificados end-to-end contra instancias reales, ver [docs/design/0017-database-compatibility.md](docs/design/0017-database-compatibility.md).
 - **Sub-subagentes**: un subagente puede delegar en otro subagente, con la misma allowlist explícita que gateway→subagente — ver [docs/design/0014-sub-subagents.md](docs/design/0014-sub-subagents.md).
 - **Secretos en la nube**: Vault (default) o directo en AWS Secrets Manager / GCP Secret Manager / Azure Key Vault — ver [docs/design/0019-cloud-secret-backends.md](docs/design/0019-cloud-secret-backends.md).
 

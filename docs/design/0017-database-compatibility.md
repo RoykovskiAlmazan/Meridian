@@ -1,7 +1,7 @@
 # Compatibilidad con MySQL/MSSQL (además de Postgres)
 
-Estado: Postgres y MySQL verificados end-to-end. MSSQL soportado por el mismo código,
-sin probar en este entorno (ver sección 4).
+Estado: **Postgres, MySQL y MSSQL verificados end-to-end**, los tres contra motores reales
+(ver sección 3/4).
 
 ## 1. Por qué esto fue un rediseño, no un parche
 
@@ -48,27 +48,31 @@ las queries construidas de forma portable, no un cambio de paradigma a objetos m
   dict JSON, audit_log) verificado leyendo los valores de vuelta con los tipos Python
   correctos (`list`, `dict`); `meridianctl doctor` reconoció correctamente
   `DB_BACKEND=mysql` y confirmó el schema completo.
+- **SQL Server 2022** (`mcr.microsoft.com/mssql/server:2022-latest`, contenedor real,
+  aislado): se encontró que esta máquina ya tenía instalado el driver ODBC 17 de
+  Microsoft (`Get-OdbcDriver` en PowerShell), así que se pudo probar de verdad en vez de
+  quedarse en "debería funcionar". Se creó la base `meridian` a mano (SQL Server no la
+  crea sola desde la cadena de conexión, a diferencia de Postgres/MySQL), se aplicó el
+  schema con `apply_schema()`, y se corrió el mismo CRUD completo que con MySQL --
+  incluyendo `allowed_intents`/`policy` guardados y leídos correctamente como `list`/`dict`
+  de Python pese a que MSSQL no tiene un tipo `JSON` nativo real (SQLAlchemy lo mapea a
+  `NVARCHAR(MAX)` + serialización) -- y `meridianctl doctor` reconociendo
+  `DB_BACKEND=mssql`.
 
-## 4. MSSQL: soportado por diseño, no probado
+## 4. Detalles de MSSQL que sí importaron en la práctica
 
-El mismo código (`schema_meta.py`, `repository.py`, `config.database_url` con dialecto
-`mssql+pyodbc`) debería funcionar contra SQL Server sin cambios adicionales -- MSSQL no
-tiene peculiaridades que este código no maneje ya (usa `CHAR(36)`/`JSON` igual que MySQL).
-No se verificó end-to-end en esta sesión porque:
-
-- Requiere el **driver ODBC de Microsoft** instalado a nivel de sistema operativo (no es
-  instalable solo con `pip`) -- se agregó como extra opcional
-  (`pip install -e ".[mssql]"`, que trae `pyodbc`) pero el driver del SO no está disponible
-  en este entorno.
-- La imagen oficial de SQL Server (`mcr.microsoft.com/mssql/server`) tiene requisitos de
-  licencia/arquitectura (no corre en todas las plataformas igual que Postgres/MySQL) que
-  no se validaron aquí.
-
-**Recomendación**: si Rodrigo necesita MSSQL en concreto, el siguiente paso es levantar un
-contenedor de SQL Server real (o una instancia de prueba en Azure) e instalar el driver
-ODBC, y correr la misma prueba que se hizo con MySQL (`apply_schema()` + CRUD completo) --
-la expectativa es que funcione directo, pero "debería funcionar" no es lo mismo que
-"se probó", y no se quiere afirmar lo segundo sin haberlo hecho.
+- El nombre exacto del driver ODBC varía entre máquinas ("ODBC Driver 17..." vs.
+  "...18..."). Se agregó `MSSQL_ODBC_DRIVER` (default: `"ODBC Driver 17 for SQL Server"`,
+  el que resultó estar instalado aquí) en vez de hardcodear una versión.
+- A diferencia de Postgres/MySQL, conectarse con `DB_NAME=meridian` antes de que esa base
+  exista falla -- SQL Server no la crea implícitamente. Hay que crearla una vez a mano
+  (`CREATE DATABASE meridian`, conectado a `master`) antes de correr `meridianctl doctor
+  --fix` por primera vez contra un servidor MSSQL nuevo. No se automatizó esto en
+  `doctor` porque requeriría conectarse dos veces con dos DSN distintos (uno a `master`,
+  otro a la base de destino) -- una mejora futura razonable si se usa MSSQL seguido.
+- El driver ODBC de Microsoft es la única pieza de este soporte que **no** se instala solo
+  con `pip` -- sigue siendo un requisito de sistema operativo, documentado en
+  `pyproject.toml` (extra `mssql`).
 
 ## 5. Cómo usar un backend distinto
 
