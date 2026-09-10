@@ -51,7 +51,8 @@ Lineamientos ya acordados con Rodrigo (no negociables salvo que él los cambie e
 
 Estas son preguntas abiertas. No elijas por default silenciosamente — plantéalas explícitamente cuando llegue el momento de implementar esa parte, y actualiza este archivo con la respuesta.
 
-1. **Interfaz de abstracción multi-proveedor LLM**: cómo se normaliza tool-calling/streaming/costos entre Claude, Codex/OpenAI y Gemini para que main y subagentes puedan mezclar proveedores sin acoplar el resto del sistema a un SDK concreto. Bloqueado en la práctica por necesitar credenciales reales de al menos un proveedor para probar — ver pregunta pendiente a Rodrigo en el chat.
+Sin puntos abiertos pendientes por ahora — el roadmap de la sección 7 está completo. Nuevas
+decisiones a resolver se agregan aquí conforme surjan (ver sección 6).
 
 ## 8. Decisiones tomadas
 
@@ -72,6 +73,7 @@ Estas son preguntas abiertas. No elijas por default silenciosamente — plantéa
 | 13 | Orden de trabajo tras el entregable 2 | **Mantener el roadmap**: entregable 3 (sandbox) antes que construir el primer subagente de dominio real | Decidido por Rodrigo el 2026-09-09 — prioriza tener la capa de seguridad antes de exponer un subagente a APIs externas reales. |
 | 14 | Formato de reglas de comportamiento | **`behavior/AGENTS.md` (fijo, sin dominio) + policy configurable por subagente en Postgres** | Ver [docs/design/0005-behavior-policy.md](docs/design/0005-behavior-policy.md). Resuelto tras la corrección de Rodrigo de que Meridian no debe asumir ningún dominio (2026-09-09). |
 | 15 | Observabilidad | **Logs JSON a stdout (local) + `audit_log` en Postgres como fuente de verdad de auditoría + `meridianctl audit prune` para retención configurable (sugerido 90 días)**. Sin Prometheus/OTel por ahora. | Decisión tomada de forma autónoma el 2026-09-10 con instrucción explícita de Rodrigo de continuar el roadmap sin pausar por cada punto — ver [docs/design/0008-observability.md](docs/design/0008-observability.md). Revisable si aparece un requisito concreto de monitoreo externo. |
+| 16 | Interfaz de abstracción multi-proveedor LLM | **Interfaz mínima de una sola vuelta (`LLMProvider.complete`), sin tool-calling/streaming todavía; adapters de Anthropic y OpenAI; resuelto por subagente vía `subagent_llm_config` (Postgres) + `SecretRef` a Vault.** | Implementado el 2026-09-10 — ver [docs/design/0009-llm-provider-layer.md](docs/design/0009-llm-provider-layer.md). Rodrigo confirmó tener API keys de Anthropic y OpenAI; guardarlas en Vault y probar con `meridianctl llm test` es un paso manual suyo (entrar API keys reales está fuera de lo que Claude puede hacer por él). |
 
 ## 5. Requisitos de seguridad no negociables para el diseño (aprendidos de la auditoría)
 
@@ -98,4 +100,6 @@ Estos sí son lineamientos ya fijados, a diferencia de la sección 4:
 - **Entregable 4 (completo, enforcement pendiente):** Reglas de comportamiento fijas de plataforma (`behavior/AGENTS.md`, `behavior/IDENTITY.md`) + policy configurable por subagente (qué es irreversible, aprobación, reintentos, tono) vía `meridianctl policy`, ya que Meridian no asume ningún dominio fijo — ver [docs/design/0005-behavior-policy.md](docs/design/0005-behavior-policy.md). Falta conectar esa policy al camino de ejecución real (`main`/subagentes aún no la hacen cumplir, solo existe como datos).
 - **Entregable 5 (completo):** Gateway cron real agregado sin cambios en `main_agent` — validado end-to-end el 2026-09-09, ver [docs/design/0006-cron-gateway.md](docs/design/0006-cron-gateway.md). Falta un tercer gateway (ej. Telegram) si se quiere seguir estresando el contrato con un canal conversacional real.
 - **Caso de prueba (completo):** Buscador de papers (arXiv) con 2 subagentes de dominio real corriendo en paralelo — primer tráfico real permitido a través del sandbox de egress. Ver [docs/design/0007-paper-search-app.md](docs/design/0007-paper-search-app.md).
-- **Entregable 6:** Iterar sobre observabilidad (punto abierto 2), integración de Vault y capa multi-proveedor LLM (punto abierto 3) con datos reales de un caso de uso piloto (el dominio concreto lo elige quien instale Meridian; el de Rodrigo, a modo de ejemplo, sería stock/inventario multi-marketplace).
+- **Entregable 6 (completo, prueba real con LLM pendiente de un paso manual de Rodrigo):** Observabilidad (logs JSON + retención de `audit_log`, ver [0008](docs/design/0008-observability.md)) y capa multi-proveedor LLM (Anthropic/OpenAI, ver [0009](docs/design/0009-llm-provider-layer.md)) conectada al caso de prueba del buscador de papers.
+
+**Roadmap original completo.** Próximos pasos posibles (no decididos, a definir con Rodrigo cuando retome el proyecto): un tercer gateway conversacional real (Telegram), conectar el enforcement de `subagent_policy` al camino de ejecución, o el primer subagente de un dominio de negocio real (ej. el caso de inventario multi-marketplace de Rodrigo).

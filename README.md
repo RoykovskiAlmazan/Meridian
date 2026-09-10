@@ -19,13 +19,19 @@ comportamiento configurable por subagente (`meridianctl policy`) — Meridian no
 ningún dominio, cada subagente define qué es irreversible, cuándo pedir aprobación,
 reintentos y tono. Ver [docs/design/0005-behavior-policy.md](docs/design/0005-behavior-policy.md).
 
-**Entregable 5 completo**: segundo gateway real (cron, `meridianctl cron`) agregado sin
-tocar `main_agent` — confirma que el contrato interno aguanta un tipo de gateway distinto
-al mock HTTP. Ver [docs/design/0006-cron-gateway.md](docs/design/0006-cron-gateway.md).
+**Roadmap original (PROJECT_BRIEF.md sección 7) completo**: entregables 1-6 implementados
+y verificados end-to-end, incluyendo un caso de prueba de dominio real (buscador de papers
+en arXiv, [0007](docs/design/0007-paper-search-app.md)), observabilidad
+([0008](docs/design/0008-observability.md)) y una capa multi-proveedor LLM
+(Anthropic/OpenAI, [0009](docs/design/0009-llm-provider-layer.md)).
 
-Siguiente: un tercer gateway conversacional real (ej. Telegram) para seguir estresando el
-contrato, o profundizar en el primer subagente de dominio real — pendiente de decidir con
-Rodrigo.
+Pendiente de un paso manual de Rodrigo (no delegable: entrar una API key real): guardar su
+credencial de Anthropic/OpenAI vía `meridianctl secrets put` y correr `meridianctl llm
+test` para confirmar la llamada real al proveedor.
+
+Próximos pasos posibles, sin decidir todavía: un tercer gateway conversacional real
+(Telegram), conectar el enforcement de `subagent_policy` al camino de ejecución, o el
+primer subagente de un dominio de negocio real.
 
 ## Stack
 
