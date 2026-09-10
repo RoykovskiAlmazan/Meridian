@@ -137,6 +137,10 @@ Empaquétalo con su propio `Dockerfile` (copia el patrón de
 `docker/subagents/sample_subagent_a.Dockerfile`) y agrégalo a `docker/docker-compose.yml`
 bajo un profile propio.
 
+**Guía completa paso a paso:** [docs/guides/build-a-subagent.md](docs/guides/build-a-subagent.md)
+recorre todo el proceso de principio a fin -- código, Dockerfile, red/sandbox, permisos,
+cron, LLM opcional, cómo ver el resultado, y problemas comunes.
+
 ## CLI (`meridianctl`)
 
 ```
@@ -153,6 +157,7 @@ meridianctl secrets put         Alta de secretos en Vault (prompt oculto o --fro
 meridianctl llm set/get/test    Proveedor LLM por subagente (anthropic/openai/gemini/groq/xai)
 meridianctl cron ...            Gateway de tipo cron (disparos programados)
 meridianctl audit tail/prune    Auditoría y retención
+meridianctl results tail        Resultado real (output/error) de un gateway -- no solo el resumen de audit_log
 meridianctl bus status          Salud del bus interno (Redis Streams)
 ```
 

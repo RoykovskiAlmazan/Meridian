@@ -5,7 +5,7 @@ import typer
 from meridian.cli.console import ok
 from meridian.secrets.vault_client import put_secret
 
-app = typer.Typer(help="Alta de secretos en Vault (API keys de LLM, tokens, etc.) -- nunca en texto plano en el repo.")
+app = typer.Typer(help="Guarda contraseñas y API keys de forma segura en Vault -- nunca quedan en texto plano en el repo, en la terminal, ni en el historial de comandos.")
 
 
 def read_secret_value(prompt_text: str, from_file: str | None) -> str:
@@ -19,7 +19,14 @@ def read_secret_value(prompt_text: str, from_file: str | None) -> str:
     return typer.prompt(prompt_text, hide_input=True)
 
 
-@app.command("put")
+@app.command(
+    "put",
+    epilog=(
+        "Ejemplos:\n\n"
+        "  meridianctl secrets put --path llm/anthropic --field api_key   # pide el valor de forma oculta\n"
+        "  meridianctl secrets put --path llm/openai --from-file clave.txt # scripts/CI, sin prompt interactivo"
+    ),
+)
 def put(
     mount: str = typer.Option("secret", "--mount"),
     path: str = typer.Option(..., "--path", help="ej. llm/anthropic"),

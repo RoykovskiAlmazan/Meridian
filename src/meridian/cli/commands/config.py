@@ -4,10 +4,13 @@ from meridian.cli.console import fail
 from meridian.cli.console import ok as ok_msg
 from meridian.config import settings
 
-app = typer.Typer(help="Valida que Postgres, Redis y Vault sean alcanzables. Para un diagnóstico más completo (con autoreparación), usa `meridianctl doctor`.")
+app = typer.Typer(help="Prueba rápida de conexión a la base de datos, Redis y Vault. Para un diagnóstico completo con reparación automática, usa `meridianctl doctor` en su lugar.")
 
 
-@app.command("check")
+@app.command(
+    "check",
+    epilog="Ejemplo:\n\n  meridianctl config check",
+)
 def check() -> None:
     healthy = True
 

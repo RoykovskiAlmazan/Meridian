@@ -13,7 +13,7 @@ import typer
 from meridian.cli.console import fail, ok, warn
 from meridian.config import settings
 
-app = typer.Typer(help="Inicialización y desello de Vault (una sola vez por instalación -- ver docs/design/0016-vault-persistence.md).")
+app = typer.Typer(help="Enciende y desbloquea Vault, el lugar donde Meridian guarda todas las contraseñas y API keys. `init` es una sola vez; `unseal` hace falta cada vez que se reinicia.")
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _INIT_FILE = _REPO_ROOT / ".vault-init.json"
@@ -23,7 +23,10 @@ def _client() -> hvac.Client:
     return hvac.Client(url=settings.vault_addr)
 
 
-@app.command("init")
+@app.command(
+    "init",
+    epilog="Ejemplo:\n\n  meridianctl vault init\n  # copia el VAULT_TOKEN=... que imprime a tu .env",
+)
 def init() -> None:
     """Inicializa Vault (una sola vez, la primera vez que se levanta un volumen nuevo de
     Vault). Guarda la unseal key + root token en .vault-init.json (gitignored, NUNCA se
@@ -53,7 +56,10 @@ def init() -> None:
     warn(f"{_INIT_FILE.name} nunca se sube a git (ver .gitignore) -- guárdalo en un lugar seguro, es la única forma de desellar Vault de nuevo si el proceso se reinicia.")
 
 
-@app.command("unseal")
+@app.command(
+    "unseal",
+    epilog="Ejemplo:\n\n  meridianctl vault unseal",
+)
 def unseal() -> None:
     """Desella Vault usando la clave guardada en .vault-init.json -- necesario cada vez
     que el proceso de Vault se reinicia (el sellado es por diseño de Vault, no un bug)."""
@@ -74,7 +80,11 @@ def unseal() -> None:
     ok("Vault desellado.")
 
 
-@app.command("status")
+@app.command(
+    "status",
+    help="Consulta rápida de initialized/sealed, sin autenticarse -- útil como chequeo previo a `doctor`.",
+    epilog="Ejemplo:\n\n  meridianctl vault status",
+)
 def status() -> None:
     client = _client()
     initialized = client.sys.is_initialized()

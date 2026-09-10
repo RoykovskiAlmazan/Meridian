@@ -9,10 +9,14 @@ from meridian.cli.console import fail, ok, print_records
 from meridian.identity import repository
 from meridian.messages import new_task_result
 
-app = typer.Typer(help="Aprobación humana de intents marcados como requires_approval en la policy de un subagente.")
+app = typer.Typer(help="Tareas que quedaron detenidas esperando que un humano las apruebe o rechace, según la policy del subagente.")
 
 
-@app.command("list")
+@app.command(
+    "list",
+    help="Lista los intents retenidos por policy (requires_approval_intents), por default los que siguen 'pending'.",
+    epilog="Ejemplos:\n\n  meridianctl approvals list\n  meridianctl approvals list --status denied --tenant 697580ae-...",
+)
 def list_(
     status: str = typer.Option("pending", "--status", help="pending | approved | denied"),
     tenant: str | None = typer.Option(None, "--tenant"),
@@ -23,7 +27,11 @@ def list_(
     )
 
 
-@app.command("approve")
+@app.command(
+    "approve",
+    help="Aprueba una aprobación pendiente: reenvía el intent original al subagente como si nunca se hubiera detenido.",
+    epilog="Ejemplo:\n\n  meridianctl approvals approve --id 3f1a9c2e-...",
+)
 def approve(id_: str = typer.Option(..., "--id")) -> None:
     approval = repository.get_pending_approval(UUID(id_))
     if approval is None:
@@ -42,7 +50,11 @@ def approve(id_: str = typer.Option(..., "--id")) -> None:
     ok(f"aprobación {id_} aprobada -- intent reenviado a subagent={approval['subagent_id']}")
 
 
-@app.command("deny")
+@app.command(
+    "deny",
+    help="Deniega una aprobación pendiente: publica un TaskResult de error para no dejar el fan-in colgado, el subagente nunca la ejecuta.",
+    epilog="Ejemplo:\n\n  meridianctl approvals deny --id 3f1a9c2e-...",
+)
 def deny(id_: str = typer.Option(..., "--id")) -> None:
     approval = repository.get_pending_approval(UUID(id_))
     if approval is None:

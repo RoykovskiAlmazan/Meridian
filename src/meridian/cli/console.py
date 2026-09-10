@@ -19,7 +19,11 @@ def get_version() -> str:
         return "0.0.0-dev"
 
 
-BANNER = r"""[bold cyan]
+# Fallback ASCII-only -- mismo motivo que los marcadores [OK]/[FAIL]/[WARN] de abajo: una
+# consola clásica de Windows (cp1252, sin Windows Terminal) truena con UnicodeEncodeError
+# en los bloques Unicode (█ ╔ ╗ ░ ▄ etc.) del banner "de lujo". Este es el que ve cualquiera
+# que instale Meridian en una terminal que no declare encoding UTF-8.
+BANNER_ASCII = r"""[bold cyan]
  __  __           _     _ _
 |  \/  | ___ _ __(_) __| (_) __ _ _ __
 | |\/| |/ _ \ '__| |/ _` | |/ _` | '_ \
@@ -27,9 +31,47 @@ BANNER = r"""[bold cyan]
 |_|  |_|\___|_|  |_|\__,_|_|\__,_|_| |_|
 [/bold cyan][dim]codename: Project Foreman[/dim]"""
 
+# Banner "de lujo" -- fuente de bloque (mismo estilo que un banner ANSI Shadow de figlet),
+# a pedido de Rodrigo, con los colores de su tema real de terminal (oh-my-posh
+# "kushal.omp.json": cian #00C7FC; su perfil de PowerShell: indigo #5C6BAF) y su propio
+# mapache ASCII (de Documents/PowerShell/Microsoft.PowerShell_profile.ps1), reutilizado
+# aquí tal cual con su permiso. Solo se muestra si la terminal declara un encoding UTF-8
+# (ver `_supports_unicode_banner`).
+BANNER_FANCY = (
+    "[#5C6BAF]"
+    "███╗   ███╗███████╗██████╗ ██╗██████╗ ██╗ █████╗ ███╗   ██╗\n"
+    "████╗ ████║██╔════╝██╔══██╗██║██╔══██╗██║██╔══██╗████╗  ██║\n"
+    "██╔████╔██║█████╗  ██████╔╝██║██║  ██║██║███████║██╔██╗ ██║\n"
+    "██║╚██╔╝██║██╔══╝  ██╔══██╗██║██║  ██║██║██╔══██║██║╚██╗██║\n"
+    "██║ ╚═╝ ██║███████╗██║  ██║██║██████╔╝██║██║  ██║██║ ╚████║\n"
+    "╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
+    "[/]\n"
+    "[#00C7FC]codename: Project Foreman[/]\n"
+    "[#5C6BAF]"
+    "░░░░░░░░░░░░░░░▄▄▄▄▄▄▄▄░░░░░░░░░░░░░░\n"
+    "░▄█▀███▄▄████████████████████▄▄███▀█░\n"
+    "░█░░▀████████████████████████████░░█░\n"
+    "░░█▄░░▀████████████████████████░░░▄▀░\n"
+    "░░░▀█▄▄████▀▀▀░░░░██░░░▀▀▀█████▄▄█▀░░\n"
+    "░░░▄███▀▀░░░░░░░░░██░░░░░░░░░▀███▄░░░\n"
+    "░░▄██▀░░░░░▄▄▄██▄▄██░▄██▄▄▄░░░░░▀██▄░\n"
+    "▄██▀░░░▄▄▄███▄██████████▄███▄▄▄░░░▀█▄\n"
+    "▀██▄▄██████████▀░███▀▀▀█████████▄▄▄█▀\n"
+    "░░▀██████████▀░░░███░░░▀███████████▀░\n"
+    "░░░░▀▀▀██████░░░█████▄░░▀██████▀▀░░░░\n"
+    "░░░░░░░░░▀▀▀▀▄░░█████▀░▄█▀▀▀░░░░░░░░░\n"
+    "░░░░░░░░░░░░░░▀▀▄▄▄▄▄▀▀░░░░░░░░░░░░░░"
+    "[/]"
+)
+
+
+def _supports_unicode_banner() -> bool:
+    encoding = (getattr(console.file, "encoding", "") or "").lower()
+    return "utf" in encoding
+
 
 def print_banner() -> None:
-    console.print(BANNER)
+    console.print(BANNER_FANCY if _supports_unicode_banner() else BANNER_ASCII)
     console.print(f"[dim]v{get_version()} · beta · orquestación multiagente de propósito general[/dim]\n")
 
 

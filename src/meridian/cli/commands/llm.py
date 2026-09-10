@@ -6,10 +6,19 @@ from meridian.cli.console import fail, ok, print_record
 from meridian.identity import repository
 from meridian.llm.registry import get_provider_for_subagent
 
-app = typer.Typer(help="Qué proveedor/modelo LLM usa cada subagente (configurable, multi-proveedor).")
+app = typer.Typer(help="Conecta un subagente a un proveedor de IA (Claude, GPT, Gemini, Groq, Grok) para que pueda generar texto -- opcional, un subagente funciona sin esto, solo con menos capacidad.")
 
 
-@app.command("set")
+@app.command(
+    "set",
+    help="Conecta un subagente a un proveedor/modelo LLM. Necesitas primero guardar la API key con `meridianctl secrets put` y pasar aquí el credential_ref que te devolvió.",
+    epilog=(
+        "Ejemplo:\n\n"
+        "  meridianctl secrets put --path llm/anthropic --field api_key\n"
+        "  meridianctl llm set --subagent 88fc9c58-... --provider anthropic \\\n"
+        "    --model claude-sonnet-5 --credential-ref vault:secret/llm/anthropic#api_key"
+    ),
+)
 def set_(
     subagent: str = typer.Option(..., "--subagent"),
     provider: str = typer.Option(..., "--provider", help="anthropic | openai | gemini | groq | xai"),
@@ -20,7 +29,10 @@ def set_(
     ok(f"subagent={subagent} -> provider={provider} model={model}")
 
 
-@app.command("get")
+@app.command(
+    "get",
+    epilog="Ejemplo:\n\n  meridianctl llm get --subagent 88fc9c58-...",
+)
 def get(subagent: str = typer.Option(..., "--subagent")) -> None:
     config = repository.get_subagent_llm_config(UUID(subagent))
     if config is None:
@@ -29,7 +41,10 @@ def get(subagent: str = typer.Option(..., "--subagent")) -> None:
         print_record(config)
 
 
-@app.command("test")
+@app.command(
+    "test",
+    epilog="Ejemplo:\n\n  meridianctl llm test --subagent 88fc9c58-... --prompt \"Resume en una palabra: Meridian\"",
+)
 def test(
     subagent: str = typer.Option(..., "--subagent"),
     prompt: str = typer.Option("Responde con una sola palabra: 'ok'.", "--prompt"),
