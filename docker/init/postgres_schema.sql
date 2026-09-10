@@ -69,6 +69,17 @@ CREATE TABLE cron_jobs (
     UNIQUE (tenant_id, name)
 );
 
+-- Modelo LLM configurable por subagente (decisión #8 del brief: multi-proveedor, no
+-- atado a uno solo). credential_ref es siempre un SecretRef a Vault, nunca la API key en
+-- claro. Ver docs/design/0009-llm-provider-layer.md.
+CREATE TABLE subagent_llm_config (
+    subagent_id     UUID PRIMARY KEY REFERENCES subagents(id),
+    provider        TEXT NOT NULL CHECK (provider IN ('anthropic', 'openai', 'gemini')),
+    model           TEXT NOT NULL,
+    credential_ref  TEXT NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE audit_log (
     id              BIGSERIAL PRIMARY KEY,
     tenant_id       UUID NOT NULL REFERENCES tenants(id),

@@ -4,7 +4,7 @@ Ver docs/design/0002-repo-structure-and-cli.md para el catálogo completo de com
 """
 import typer
 
-from meridian.cli.commands import allow, audit, bus, config, cron, dev, gateway, policy, subagent, tenant
+from meridian.cli.commands import allow, audit, bus, config, cron, dev, gateway, llm, policy, secrets, subagent, tenant
 
 app = typer.Typer(help="meridianctl -- administración de la plataforma Meridian.")
 
@@ -16,6 +16,8 @@ app.add_typer(subagent.app, name="subagent")
 app.add_typer(allow.app, name="allow")
 app.add_typer(policy.app, name="policy")
 app.add_typer(cron.app, name="cron")
+app.add_typer(secrets.app, name="secrets")
+app.add_typer(llm.app, name="llm")
 app.add_typer(audit.app, name="audit")
 app.add_typer(bus.app, name="bus")
 

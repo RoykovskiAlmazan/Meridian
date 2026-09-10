@@ -145,6 +145,31 @@ def get_subagent_policy(subagent_id: UUID) -> dict[str, Any]:
         return row["policy"] if row else {}
 
 
+# ---- LLM provider config (por subagente) ---------------------------------
+# Ver docs/design/0009-llm-provider-layer.md: qué proveedor/modelo usa cada subagente es
+# configuración, no un default fijo de plataforma (decisión #8 del brief).
+
+def set_subagent_llm_config(subagent_id: UUID, provider: str, model: str, credential_ref: str) -> None:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO subagent_llm_config (subagent_id, provider, model, credential_ref)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (subagent_id)
+               DO UPDATE SET provider = EXCLUDED.provider, model = EXCLUDED.model,
+                              credential_ref = EXCLUDED.credential_ref, updated_at = now()""",
+            (subagent_id, provider, model, credential_ref),
+        )
+
+
+def get_subagent_llm_config(subagent_id: UUID) -> dict[str, Any] | None:
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            "SELECT subagent_id, provider, model, credential_ref, updated_at FROM subagent_llm_config WHERE subagent_id = %s",
+            (subagent_id,),
+        )
+        return cur.fetchone()
+
+
 # ---- allowlist --------------------------------------------------------
 
 def set_allowlist(gateway_id: UUID, subagent_id: UUID, allowed_intents: list[str]) -> None:
