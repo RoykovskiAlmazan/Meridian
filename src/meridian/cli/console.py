@@ -2,7 +2,8 @@
 `Console` de Rich para que toda la salida se vea consistente entre subcomandos."""
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version as pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 
 from rich.console import Console
 from rich.table import Table

@@ -11,7 +11,7 @@ que la fila describe.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from croniter import croniter
 
@@ -29,12 +29,12 @@ def _is_due(job: dict) -> bool:
     baseline = job["last_run_at"] or job["created_at"]
     next_fire = croniter(job["schedule"], baseline).get_next(datetime)
     if next_fire.tzinfo is None:
-        next_fire = next_fire.replace(tzinfo=timezone.utc)
-    return next_fire <= datetime.now(timezone.utc)
+        next_fire = next_fire.replace(tzinfo=UTC)
+    return next_fire <= datetime.now(UTC)
 
 
 def _fire(job: dict) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     intent = new_task_intent(
         tenant_id=str(job["tenant_id"]),
         gateway_id=str(job["gateway_id"]),

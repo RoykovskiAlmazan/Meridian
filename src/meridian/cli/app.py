@@ -4,7 +4,21 @@ Ver docs/design/0002-repo-structure-and-cli.md para el catálogo completo de com
 """
 import typer
 
-from meridian.cli.commands import allow, audit, bus, config, cron, dev, doctor, gateway, llm, policy, secrets, subagent, tenant
+from meridian.cli.commands import (
+    allow,
+    audit,
+    bus,
+    config,
+    cron,
+    dev,
+    doctor,
+    gateway,
+    llm,
+    policy,
+    secrets,
+    subagent,
+    tenant,
+)
 from meridian.cli.console import get_version, print_banner
 
 app = typer.Typer(

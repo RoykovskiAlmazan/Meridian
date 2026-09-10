@@ -28,7 +28,7 @@ def _check_env_file(fix: bool) -> bool:
         return True
     if fix and _ENV_EXAMPLE.exists():
         shutil.copy(_ENV_EXAMPLE, _ENV_FILE)
-        ok(f".env no existía -- copiado desde .env.example (revisa/ajusta los valores)")
+        ok(".env no existía -- copiado desde .env.example (revisa/ajusta los valores)")
         return True
     fail(".env no encontrado -- copia .env.example a .env y ajusta los valores (o corre `doctor --fix`)")
     return False

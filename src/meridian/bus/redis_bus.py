@@ -13,7 +13,8 @@ mapeo a campos de Redis.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import redis
 

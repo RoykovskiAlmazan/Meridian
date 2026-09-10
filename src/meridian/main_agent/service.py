@@ -9,7 +9,7 @@ de un entregable posterior si la carga real lo justifica.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -60,7 +60,7 @@ def _handle_intent(entry_id: str, intent: dict[str, Any]) -> None:
         forwarded["trace"] = intent["trace"] + [{
             "hop": hop,
             "agent_id": "main",
-            "received_at": datetime.now(timezone.utc).isoformat(),
+            "received_at": datetime.now(UTC).isoformat(),
             "decision": "forwarded",
             "reason": None,
         }]

@@ -54,7 +54,7 @@ def get_result(correlation_id: str, gateway_id: str) -> dict[str, Any]:
     Polling simple (XRANGE) -- suficiente para probar el MVP, no para un gateway real de producción."""
     client = redis_bus.get_client()
     stream = redis_bus.result_stream_for_gateway(gateway_id)
-    for entry_id, fields in client.xrange(stream):
+    for _entry_id, fields in client.xrange(stream):
         payload = json.loads(fields["data"])
         if payload["correlation_id"] == correlation_id:
             return payload

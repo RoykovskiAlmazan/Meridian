@@ -13,7 +13,6 @@ from psycopg.rows import dict_row
 
 from meridian.identity.db import get_conn
 
-
 # ---- tenants ----------------------------------------------------------
 
 def create_tenant(name: str) -> dict[str, Any]:

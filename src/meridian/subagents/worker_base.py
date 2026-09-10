@@ -8,8 +8,9 @@ de mensajes y el fan-out/fan-in funcionan de punta a punta.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from meridian.bus import redis_bus
 from meridian.logging_setup import configure
@@ -28,7 +29,7 @@ def run(subagent_id: str, handler: Handler) -> None:
     log.info("subagent worker starting, listening on %s", stream)
     while True:
         for entry_id, intent in redis_bus.consume(stream, group, consumer, block_ms=2000):
-            started_at = datetime.now(timezone.utc).isoformat()
+            started_at = datetime.now(UTC).isoformat()
             try:
                 output = handler(intent["intent"]["payload"])
                 result = new_task_result(
