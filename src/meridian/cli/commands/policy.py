@@ -3,6 +3,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.console import ok, print_record
 from meridian.identity import repository
 from meridian.policy import DEFAULT_POLICY, resolve_policy, validate_policy
 
@@ -18,16 +19,16 @@ def set_(
         policy = json.load(f)
     validate_policy(policy)
     repository.set_subagent_policy(UUID(subagent), policy)
-    typer.echo(f"policy actualizada para subagent={subagent}")
+    ok(f"policy actualizada para subagent={subagent}")
 
 
 @app.command("get")
 def get(subagent: str = typer.Option(..., "--subagent")) -> None:
     stored = repository.get_subagent_policy(UUID(subagent))
-    typer.echo(resolve_policy(stored))
+    print_record(resolve_policy(stored))
 
 
 @app.command("show-default")
 def show_default() -> None:
     """Muestra la policy conservadora que aplica a un subagente sin policy configurada."""
-    typer.echo(DEFAULT_POLICY)
+    print_record(DEFAULT_POLICY)

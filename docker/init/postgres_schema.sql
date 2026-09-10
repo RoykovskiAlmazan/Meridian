@@ -3,14 +3,14 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE tenants (
+CREATE TABLE IF NOT EXISTS tenants (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL UNIQUE,
     status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE gateways (
+CREATE TABLE IF NOT EXISTS gateways (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
     type            TEXT NOT NULL CHECK (type IN ('whatsapp', 'telegram', 'internal_api', 'cron', 'web_panel', 'other')),
@@ -22,7 +22,7 @@ CREATE TABLE gateways (
     UNIQUE (tenant_id, name)
 );
 
-CREATE TABLE subagents (
+CREATE TABLE IF NOT EXISTS subagents (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID NOT NULL REFERENCES tenants(id),
     name        TEXT NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE subagents (
     UNIQUE (tenant_id, name)
 );
 
-CREATE TABLE gateway_subagent_allowlist (
+CREATE TABLE IF NOT EXISTS gateway_subagent_allowlist (
     gateway_id      UUID NOT NULL REFERENCES gateways(id),
     subagent_id     UUID NOT NULL REFERENCES subagents(id),
     allowed_intents TEXT[] NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE gateway_subagent_allowlist (
 -- cuándo pedir aprobación humana, política de reintentos y tono NO viven hardcodeados en el
 -- código ni en behavior/AGENTS.md -- son datos que quien instale Meridian configura por
 -- subagente. Ver docs/design/0005-behavior-policy.md.
-CREATE TABLE subagent_policy (
+CREATE TABLE IF NOT EXISTS subagent_policy (
     subagent_id  UUID PRIMARY KEY REFERENCES subagents(id),
     policy       JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -54,7 +54,7 @@ CREATE TABLE subagent_policy (
 -- Gateway de tipo cron (entregable 5): cada fila es un disparo programado, configurable
 -- por quien instale Meridian -- el intent/subagentes/payload que dispara son datos, no
 -- código. Ver docs/design/0006-cron-gateway.md.
-CREATE TABLE cron_jobs (
+CREATE TABLE IF NOT EXISTS cron_jobs (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
     gateway_id      UUID NOT NULL REFERENCES gateways(id),
@@ -72,7 +72,7 @@ CREATE TABLE cron_jobs (
 -- Modelo LLM configurable por subagente (decisión #8 del brief: multi-proveedor, no
 -- atado a uno solo). credential_ref es siempre un SecretRef a Vault, nunca la API key en
 -- claro. Ver docs/design/0009-llm-provider-layer.md.
-CREATE TABLE subagent_llm_config (
+CREATE TABLE IF NOT EXISTS subagent_llm_config (
     subagent_id     UUID PRIMARY KEY REFERENCES subagents(id),
     provider        TEXT NOT NULL CHECK (provider IN ('anthropic', 'openai', 'gemini')),
     model           TEXT NOT NULL,
@@ -80,7 +80,7 @@ CREATE TABLE subagent_llm_config (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     id              BIGSERIAL PRIMARY KEY,
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
     correlation_id  UUID NOT NULL,
@@ -91,5 +91,5 @@ CREATE TABLE audit_log (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_audit_log_correlation_id ON audit_log (correlation_id);
-CREATE INDEX idx_audit_log_tenant_id ON audit_log (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_correlation_id ON audit_log (correlation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_id ON audit_log (tenant_id);

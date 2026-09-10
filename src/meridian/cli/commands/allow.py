@@ -2,6 +2,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.console import ok, print_records
 from meridian.identity import repository
 
 app = typer.Typer(help="Allowlist explícita gateway x subagente (nunca implícita).")
@@ -15,7 +16,7 @@ def set_(
 ) -> None:
     allowed_intents = [i.strip() for i in intents.split(",") if i.strip()]
     repository.set_allowlist(UUID(gateway), UUID(subagent), allowed_intents)
-    typer.echo(f"allowlist actualizada: gateway={gateway} subagent={subagent} intents={allowed_intents}")
+    ok(f"allowlist actualizada: gateway={gateway} subagent={subagent} intents={allowed_intents}")
 
 
 @app.command("list")
@@ -27,5 +28,4 @@ def list_(
         UUID(gateway) if gateway else None,
         UUID(subagent) if subagent else None,
     )
-    for entry in entries:
-        typer.echo(entry)
+    print_records(entries, title="Allowlist")

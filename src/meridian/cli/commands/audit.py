@@ -2,6 +2,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.console import ok, print_records
 from meridian.identity import repository
 
 app = typer.Typer(help="Inspección del audit_log: quién pidió qué y por qué se delegó.")
@@ -18,8 +19,7 @@ def tail(
         UUID(correlation_id) if correlation_id else None,
         limit,
     )
-    for entry in entries:
-        typer.echo(entry)
+    print_records(entries, title="Audit log")
 
 
 @app.command("prune")
@@ -27,4 +27,4 @@ def prune(
     older_than_days: int = typer.Option(90, "--older-than-days", help="Borra audit_log más viejo que N días (default 90 -- ajustable según tus propios requisitos de retención/cumplimiento)."),
 ) -> None:
     deleted = repository.prune_audit_log(older_than_days)
-    typer.echo(f"{deleted} entradas de audit_log borradas (más viejas que {older_than_days} días)")
+    ok(f"{deleted} entradas de audit_log borradas (más viejas que {older_than_days} días)")

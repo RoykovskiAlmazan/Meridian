@@ -2,6 +2,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.console import fail, ok, print_record
 from meridian.identity import repository
 from meridian.llm.registry import get_provider_for_subagent
 
@@ -16,13 +17,16 @@ def set_(
     credential_ref: str = typer.Option(..., "--credential-ref", help="de `meridianctl secrets put`"),
 ) -> None:
     repository.set_subagent_llm_config(UUID(subagent), provider, model, credential_ref)
-    typer.echo(f"subagent={subagent} -> provider={provider} model={model}")
+    ok(f"subagent={subagent} -> provider={provider} model={model}")
 
 
 @app.command("get")
 def get(subagent: str = typer.Option(..., "--subagent")) -> None:
     config = repository.get_subagent_llm_config(UUID(subagent))
-    typer.echo(config or "sin configurar")
+    if config is None:
+        typer.echo("sin configurar")
+    else:
+        print_record(config)
 
 
 @app.command("test")
@@ -34,8 +38,8 @@ def test(
     modelo funcionan antes de conectarlo a un subagente en producción."""
     provider = get_provider_for_subagent(subagent)
     if provider is None:
-        typer.echo("este subagente no tiene un proveedor LLM configurado (`meridianctl llm set`)")
+        fail("este subagente no tiene un proveedor LLM configurado (`meridianctl llm set`)")
         raise typer.Exit(code=1)
     response = provider.complete(system=None, prompt=prompt, max_tokens=64)
-    typer.echo(f"[{response.provider}/{response.model}] {response.text!r}")
+    ok(f"[{response.provider}/{response.model}] {response.text!r}")
     typer.echo(f"tokens: input={response.input_tokens} output={response.output_tokens}")

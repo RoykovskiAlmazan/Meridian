@@ -1,5 +1,6 @@
 import typer
 
+from meridian.cli.console import ok
 from meridian.secrets.vault_client import put_secret
 
 app = typer.Typer(help="Alta de secretos en Vault (API keys de LLM, tokens, etc.) -- nunca en texto plano en el repo.")
@@ -16,4 +17,4 @@ def put(
     resultante para usarlo en otros comandos (ej. `meridianctl llm set`)."""
     value = typer.prompt("Valor del secreto", hide_input=True)
     credential_ref = put_secret(mount, path, field, value)
-    typer.echo(f"guardado. credential_ref = {credential_ref}")
+    ok(f"guardado. credential_ref = {credential_ref}")

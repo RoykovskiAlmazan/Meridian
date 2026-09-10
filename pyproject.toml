@@ -17,6 +17,7 @@ dependencies = [
     "requests>=2.31",
     "anthropic>=0.40",
     "openai>=1.50",
+    "rich>=13.7",
 ]
 
 [project.scripts]

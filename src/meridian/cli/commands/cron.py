@@ -2,6 +2,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.console import ok, print_record, print_records
 from meridian.identity import repository
 
 app = typer.Typer(help="Gateway tipo cron: qué se dispara, cuándo, y contra qué subagentes (todo configurable).")
@@ -23,22 +24,22 @@ def create(
     job = repository.create_cron_job(
         UUID(tenant), UUID(gateway), name, schedule, intent_type, subagent_ids, json.loads(payload)
     )
-    typer.echo(job)
+    ok(f"cron job '{name}' creado")
+    print_record(job)
 
 
 @app.command("list")
 def list_(tenant: str | None = typer.Option(None, "--tenant")) -> None:
-    for job in repository.list_cron_jobs(UUID(tenant) if tenant else None):
-        typer.echo(job)
+    print_records(repository.list_cron_jobs(UUID(tenant) if tenant else None), title="Cron jobs")
 
 
 @app.command("enable")
 def enable(id_: str = typer.Option(..., "--id")) -> None:
     repository.set_cron_job_enabled(UUID(id_), True)
-    typer.echo(f"cron_job {id_} enabled")
+    ok(f"cron_job {id_} habilitado")
 
 
 @app.command("disable")
 def disable(id_: str = typer.Option(..., "--id")) -> None:
     repository.set_cron_job_enabled(UUID(id_), False)
-    typer.echo(f"cron_job {id_} disabled")
+    ok(f"cron_job {id_} deshabilitado")
