@@ -7,4 +7,7 @@ COPY schemas ./schemas
 
 RUN pip install --no-cache-dir .
 
+RUN useradd --no-create-home --shell /usr/sbin/nologin appuser
+USER appuser
+
 CMD ["python", "-m", "meridian.gateways.cron_gateway.service"]

@@ -2,6 +2,7 @@ from uuid import UUID
 
 import typer
 
+from meridian.cli.commands.secrets import read_secret_value
 from meridian.cli.console import ok, print_record, print_records
 from meridian.identity import repository
 from meridian.secrets.vault_client import put_secret
@@ -14,8 +15,9 @@ def create(
     tenant: str = typer.Option(..., "--tenant", help="tenant_id (uuid)"),
     type_: str = typer.Option(..., "--type", help="whatsapp|telegram|internal_api|cron|web_panel|other"),
     name: str = typer.Option(..., "--name"),
+    from_file: str = typer.Option(None, "--from-file", help="Lee la credencial de un archivo local en vez de pedirla interactivo (para scripts/CI)."),
 ) -> None:
-    token = typer.prompt("Credencial del gateway (se guarda en Vault, nunca en Postgres)", hide_input=True)
+    token = read_secret_value("Credencial del gateway (se guarda en Vault, nunca en Postgres)", from_file)
     gateway = repository.create_gateway(UUID(tenant), type_, name, credential_ref=None)
     credential_ref = put_secret("secret", f"gateways/{gateway['id']}", "token", token)
     repository.rotate_gateway_credential(gateway["id"], credential_ref)
@@ -35,8 +37,11 @@ def revoke(id_: str = typer.Option(..., "--id")) -> None:
 
 
 @app.command("rotate-credential")
-def rotate_credential(id_: str = typer.Option(..., "--id")) -> None:
-    token = typer.prompt("Nueva credencial del gateway", hide_input=True)
+def rotate_credential(
+    id_: str = typer.Option(..., "--id"),
+    from_file: str = typer.Option(None, "--from-file", help="Lee la nueva credencial de un archivo local en vez de pedirla interactivo (para scripts/CI)."),
+) -> None:
+    token = read_secret_value("Nueva credencial del gateway", from_file)
     credential_ref = put_secret("secret", f"gateways/{id_}", "token", token)
     repository.rotate_gateway_credential(UUID(id_), credential_ref)
     ok(f"credencial de gateway {id_} rotada -> {credential_ref}")

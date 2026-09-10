@@ -37,21 +37,31 @@ services:
       POSTGRES_USER: meridian
       POSTGRES_PASSWORD: meridian_dev_only
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init/postgres_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     networks:
       - meridian_internal
       - meridian_hostnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian -d meridian"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     networks:
       - meridian_internal
       - meridian_hostnet
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   vault:
     image: hashicorp/vault:1.17
@@ -61,10 +71,15 @@ services:
       VAULT_DEV_ROOT_TOKEN_ID: dev-only-root-token
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     ports:
-      - "8200:8200"
+      - "${VAULT_HOST_PORT:-8200}:8200"
     networks:
       - meridian_internal
       - meridian_hostnet
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8200/v1/sys/health?standbyok=true"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   egress_proxy:
     image: ubuntu/squid:latest
@@ -83,12 +98,23 @@ services:
       REDIS_HOST: redis
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-only-root-token
+      PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
-      - vault
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     networks:
       - meridian_internal
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   cron_gateway:
     build:
@@ -99,12 +125,23 @@ services:
       REDIS_HOST: redis
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-only-root-token
+      PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
-      - vault
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     networks:
       - meridian_internal
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   mock_gateway:
     build:
@@ -115,15 +152,26 @@ services:
       REDIS_HOST: redis
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-only-root-token
+      PYTHONDONTWRITEBYTECODE: "1"
     ports:
-      - "8080:8080"
+      - "${MOCK_GATEWAY_PORT:-8080}:8080"
     depends_on:
-      - postgres
-      - redis
-      - vault
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     networks:
       - meridian_internal
       - meridian_hostnet
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   # sample_subagent_a y sample_subagent_b requieren SUBAGENT_A_ID / SUBAGENT_B_ID en .env
   # (los ids de Postgres creados con `meridianctl subagent create`). Se levantan a demanda:
@@ -145,8 +193,10 @@ services:
       no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       meridian_internal:
         ipv4_address: 172.28.1.10
@@ -175,8 +225,10 @@ services:
       no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       meridian_internal:
         ipv4_address: 172.28.1.11
@@ -209,8 +261,10 @@ services:
       no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       meridian_internal:
         ipv4_address: 172.28.1.12
@@ -239,8 +293,10 @@ services:
       no_proxy: postgres,redis,vault,localhost,127.0.0.1
       PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       meridian_internal:
         ipv4_address: 172.28.1.13
